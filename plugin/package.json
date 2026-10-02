@@ -1,0 +1,13 @@
+{
+  "name": "factrail-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "claude plugin test ."
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

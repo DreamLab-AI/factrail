@@ -1,0 +1,27 @@
+factrail
+Copyright (c) 2026 DreamLab AI
+
+Licensed under either of the Apache License, Version 2.0 (LICENSE-APACHE) or the
+MIT licence (LICENSE-MIT), at your option.
+
+factrail is a clean Rust re-implementation of designs and rules first published,
+under the MIT licence, in:
+
+  * tamaratran/fast-jev-compaction — the Jev compaction method: two noul questions
+    per tool call, the fitted history state, batching and decision thresholds.
+    LICENSES/MIT-fast-jev-compaction.txt
+  * deadczarvc-labs/jev-factkeep-compaction — fact rails: reproducible-read notes,
+    fact stubs, rail tiers, the greedy per-result escalation, last-resort eviction,
+    window pressure, saved full outputs and the secret families masked before saving.
+    LICENSES/MIT-jev-factkeep-compaction.txt
+  * deadczarvc/hermes-jev-compaction — the learned token-value model and its
+    coefficients, the pooled fact budget with contained-token coverage, metadata
+    egress, the deterministic no-model fallback and the hard eviction line.
+    LICENSES/MIT-hermes-jev-compaction.txt
+
+The agentbox estate policy (taint fence, switch, token trigger with hysteresis,
+cache-warm compaction, scope, deadline, request redaction) comes from the
+agentbox jev-compaction plugin (ADR-2093), by the same authors as this crate.
+
+The Tev1 record format followed by the dataset export is documented in
+togethercomputer/tev1 (MIT). No Tev1 code or data is included.

@@ -1,0 +1,3 @@
+# Claude Code writes the engine's type declarations into .claude/types/ when you
+# author hooks with it. They are Claude Code's, not ours: kept local, never committed.
+.claude/

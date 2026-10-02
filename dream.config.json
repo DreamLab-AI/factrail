@@ -1,0 +1,59 @@
+{
+  "repo": "DreamLab-AI/factrail",
+  "cron": "0 2 * * *",
+  "slots": [
+    {
+      "deep": "fact-rails",
+      "scan": ["fact-lines", "rail-tiers", "reproducible-reads", "last-resort-eviction"]
+    },
+    {
+      "deep": "token-value-and-pooling",
+      "scan": ["value-model", "pooled-budget", "contained-coverage"]
+    },
+    {
+      "deep": "judge-and-egress",
+      "scan": ["state-fitting", "tev-format", "redaction", "metadata-egress"]
+    },
+    {
+      "deep": "hook-policy",
+      "scan": ["taint-fence", "trigger-hysteresis", "pressure-and-gate", "protocol"]
+    },
+    {
+      "deep": "evaluation-and-data",
+      "scan": ["hindsight-labels", "session-simulation", "dataset-export"]
+    }
+  ],
+  "bonusModuli": {
+    "7": "security-adversarial",
+    "30": "api-surface-review"
+  },
+  "controlPlaneProbes": [
+    "cargo check --workspace 2>&1 | tail -5 || true"
+  ],
+  "buildStep": {
+    "cmd": "cargo build --workspace --release 2>&1 | tail -20",
+    "degradeOnWasmFailure": false
+  },
+  "evaluatorEntrypoints": {
+    "tests": "cargo test --workspace 2>&1 | tail -30",
+    "gate": {
+      "cmd": "./target/release/factrail eval --synthetic 40 --seed 0 --sim --gate eval/baseline.json 2>&1 | tail -14",
+      "required": true,
+      "timeoutSecs": 900
+    },
+    "lint": {
+      "cmd": "cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tail -20",
+      "required": false
+    }
+  },
+  "adrConvention": "3-digit",
+  "extraDisciplines": [
+    "evaluation-is-not-promotion",
+    "witness-every-quantitative-claim",
+    "a-baseline-moves-only-with-a-reason"
+  ],
+  "ledgerPath": "docs/dream-cycle/LEDGER.md",
+  "branchPrefix": "dream/",
+  "labels": ["dream-cycle", "research"],
+  "autoMerge": false
+}

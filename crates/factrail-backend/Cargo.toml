@@ -1,0 +1,25 @@
+[package]
+name = "factrail-backend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "The I/O half of factrail: System One and Tev-format judges with a round deadline and request redaction, plus the saved-output, remembered-answer and decision-log stores."
+readme = "README.md"
+keywords = ["llm", "context", "compaction", "agents", "judge"]
+categories = ["text-processing", "asynchronous"]
+documentation = "https://docs.rs/factrail-backend"
+
+[dependencies]
+factrail-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

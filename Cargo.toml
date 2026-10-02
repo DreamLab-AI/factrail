@@ -1,0 +1,52 @@
+# factrail — verbatim, fact-keeping context compaction judged by a typed-decision model.
+#
+# Crate boundaries follow purity, not features:
+#   factrail-core     pure engine: transcript model, Jev state and questions, fact rails,
+#                     learned token value, pooled fact budget, redaction. No I/O, no runtime.
+#   factrail-policy   pure estate policy: taint fence, switch, trigger and hysteresis,
+#                     cache-warm timing, compaction scope.
+#   factrail-backend  the judges: System One (TypeSafe or the sovereign façade), a Tev-format
+#                     OpenAI-compatible endpoint, recorded answers; deadline and decision log.
+#   factrail-eval     hindsight labels, the used-token fact metric, session simulation, and
+#                     dataset export in the Tev1 record format.
+#   factrail          the binary: the Claude Code hook protocol, replay, eval, dataset.
+[workspace]
+resolver = "3"
+members = [
+    "crates/factrail-core",
+    "crates/factrail-policy",
+    "crates/factrail-backend",
+    "crates/factrail-eval",
+    "crates/factrail",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DreamLab-AI/factrail"
+authors = ["DreamLab AI"]
+
+[workspace.dependencies]
+factrail-core = { version = "0.1.0", path = "crates/factrail-core" }
+factrail-policy = { version = "0.1.0", path = "crates/factrail-policy" }
+factrail-backend = { version = "0.1.0", path = "crates/factrail-backend" }
+factrail-eval = { version = "0.1.0", path = "crates/factrail-eval" }
+
+serde = { version = "1", features = ["derive"] }
+# preserve_order: tool inputs are measured and sent in the order the model wrote them.
+serde_json = { version = "1", features = ["preserve_order"] }
+regex = "1.11"
+thiserror = "2"
+sha2 = "0.10"
+hex = "0.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-util", "io-std", "fs"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+futures = "0.3"
+clap = { version = "4.5", features = ["derive"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

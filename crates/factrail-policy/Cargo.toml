@@ -1,0 +1,16 @@
+[package]
+name = "factrail-policy"
+description = "Pure estate policy for factrail compaction: taint fence, switch, token trigger with hysteresis, cache-warm timing and compaction scope."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+keywords = ["compaction", "llm", "context", "policy", "claude"]
+categories = ["text-processing", "config"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

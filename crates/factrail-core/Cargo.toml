@@ -1,0 +1,19 @@
+[package]
+name = "factrail-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Verbatim, fact-keeping context compaction for coding-agent transcripts: a typed-decision judge picks stale tool calls, and fact rails shrink their results without erasing a path, error, id or count."
+readme = "README.md"
+keywords = ["llm", "context", "compaction", "agents", "transcript"]
+categories = ["text-processing", "algorithms"]
+documentation = "https://docs.rs/factrail-core"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+thiserror = { workspace = true }

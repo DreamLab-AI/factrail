@@ -1,0 +1,8 @@
+/target
+/plugin/node_modules
+/plugin/dist
+# Real transcripts and anything derived from them never enter the repository.
+/corpus/
+/data/
+*.jsonl.local
+.claude/

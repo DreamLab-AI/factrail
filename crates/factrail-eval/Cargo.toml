@@ -1,0 +1,20 @@
+[package]
+name = "factrail-eval"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Evaluation and training data for factrail compaction: hindsight fact labels from real transcripts, the used-token fact metric, session simulation, a deterministic synthetic corpus, a regression gate, and dataset export in the Tev1 record format."
+readme = "README.md"
+keywords = ["llm", "evaluation", "compaction", "dataset", "agents"]
+categories = ["development-tools::testing", "text-processing"]
+
+[dependencies]
+factrail-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,183 @@
+{
+  "name": "factrail",
+  "version": "0.1.0",
+  "description": "Verbatim, fact-keeping context compaction. A thin function-hook shim over the native factrail binary, which holds every policy and compaction decision (hook protocol v1, docs/protocol.md).",
+  "license": "MIT OR Apache-2.0",
+  "author": {
+    "name": "DreamLab AI",
+    "url": "https://github.com/DreamLab-AI/factrail"
+  },
+  "repository": "https://github.com/DreamLab-AI/factrail",
+  "userConfig": {
+    "binary": {
+      "type": "string",
+      "title": "factrail binary",
+      "description": "Path or name of the factrail executable the hooks run (argv[0]). A bare name is looked up on PATH; the agentbox entrypoint projects /opt/agentbox/bin/factrail.",
+      "default": "factrail"
+    },
+    "apiKey": {
+      "type": "string",
+      "title": "API key",
+      "description": "Leave unset to let the binary read FACTRAIL_API_KEY or TYPESAFE_API_KEY from its environment.",
+      "sensitive": true
+    },
+    "enabledByDefault": {
+      "type": "boolean",
+      "title": "Enabled by default",
+      "description": "Starting position of the /factrail switch until it is first flipped; the switch itself is persisted in the plugin store.",
+      "default": true
+    },
+    "backend": {
+      "type": "string",
+      "title": "Backend",
+      "description": "Who judges what to keep: systemone (TypeSafe System One or a sovereign façade), tev (a Tev-format, OpenAI-compatible endpoint) or rules (the deterministic local rules; no model, nothing sent).",
+      "options": [
+        "systemone",
+        "tev",
+        "rules"
+      ],
+      "default": "systemone"
+    },
+    "baseUrl": {
+      "type": "string",
+      "title": "Backend endpoint",
+      "description": "Full URL of the backend's decision endpoint. Unset means the backend's default (the vendor cloud for systemone)."
+    },
+    "backendLocal": {
+      "type": "boolean",
+      "title": "Endpoint is on this network",
+      "description": "DECLARED, never inferred from baseUrl. True lets a tainted session be judged by the backend because nothing leaves the network; false (or anything but true) keeps tainted sessions off the model.",
+      "default": false
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "Model id sent to the backend. Unset means the backend's default."
+    },
+    "egress": {
+      "type": "string",
+      "title": "Egress",
+      "description": "What a non-local backend is sent: full (the verbatim content the judge needs, credentials redacted) or metadata (shapes and sizes only, no content). Any other value means metadata.",
+      "options": [
+        "full",
+        "metadata"
+      ],
+      "default": "full"
+    },
+    "fallback": {
+      "type": "string",
+      "title": "Fallback",
+      "description": "What runs when the model may not be used (no credentials, or a tainted session on a backend not declared local): rules (the local rules compact verbatim and send nothing) or summary (Claude Code's built-in summary).",
+      "options": [
+        "rules",
+        "summary"
+      ],
+      "default": "rules"
+    },
+    "taintTools": {
+      "type": "string",
+      "title": "Taint tool prefixes",
+      "description": "Comma-separated tool-name prefixes. A session that has ever called one is tainted: it is never sent to a non-local model; the local rules compact it instead. Unset means the binary's default (the private email gateway and Gmail)."
+    },
+    "taintSkills": {
+      "type": "string",
+      "title": "Taint skills",
+      "description": "Comma-separated skill names whose load taints the session, with the same effect as taintTools. Unset means the binary's default (email-search)."
+    },
+    "keepThreshold": {
+      "type": "number",
+      "title": "Keep threshold",
+      "description": "Minimum judged probability that a tool call or result is still needed; below it the item is removed or truncated.",
+      "default": 0.5
+    },
+    "preserveRecentMessages": {
+      "type": "number",
+      "title": "Recent messages to preserve",
+      "description": "Newest messages pinned from compaction.",
+      "default": 6
+    },
+    "maxStateTokens": {
+      "type": "number",
+      "title": "Maximum state tokens",
+      "description": "Estimated budget for the conversation state per backend request.",
+      "default": 25000
+    },
+    "maxRequestTokens": {
+      "type": "number",
+      "title": "Maximum request tokens",
+      "description": "Estimated budget for state plus questions per backend request.",
+      "default": 30000
+    },
+    "truncateHeadChars": {
+      "type": "number",
+      "title": "Truncated result head",
+      "description": "Characters of a dropped tool result kept before its note.",
+      "default": 200
+    },
+    "compactAtPercent": {
+      "type": "number",
+      "title": "Compaction percentage",
+      "description": "Ceiling: percentage of the context window at which a completed turn requests compaction. The effective trigger is the smaller of this and compactAtTokens.",
+      "default": 60
+    },
+    "compactAtTokens": {
+      "type": "number",
+      "title": "Compaction tokens",
+      "description": "Absolute trigger in tokens; the effective trigger is min(compactAtPercent of the window, this).",
+      "default": 180000
+    },
+    "rearmTokens": {
+      "type": "number",
+      "title": "Re-arm growth",
+      "description": "After a compaction, re-trigger only once context has grown this many tokens past the post-compaction size. 0 means a quarter of the trigger.",
+      "default": 40000
+    },
+    "cacheWarm": {
+      "type": "string",
+      "title": "Cache-warm action",
+      "description": "When a session above cacheWarmFloorTokens sits idle until just before its prompt cache expires: compact (while the cache is warm), notify (a toast suggesting /compact), or off.",
+      "options": [
+        "compact",
+        "notify",
+        "off"
+      ],
+      "default": "compact"
+    },
+    "cacheWarmFloorTokens": {
+      "type": "number",
+      "title": "Cache-warm floor",
+      "description": "Context size in tokens below which the idle nudge is never armed.",
+      "default": 100000
+    },
+    "cacheTtlSeconds": {
+      "type": "number",
+      "title": "Prompt-cache TTL (s)",
+      "description": "Prompt-cache lifetime the idle nudge races. 0 means detect: subscription rate limits mean 3600, ANTHROPIC_API_KEY without rate limits means 300, anything else 3600.",
+      "default": 0
+    },
+    "cacheTtlMarginSeconds": {
+      "type": "number",
+      "title": "Prompt-cache margin (s)",
+      "description": "How long before expiry the nudge fires (TTL minus this; half the TTL when the margin would exceed half of it).",
+      "default": 300
+    },
+    "compactionTimeoutMs": {
+      "type": "number",
+      "title": "Backend deadline (ms)",
+      "description": "Longest wait for the whole backend round. Past it the fallback runs and a late answer is discarded. The plugin allows the binary this plus 10 s. 0 or a negative value means the default.",
+      "default": 15000
+    },
+    "saveFullOutputs": {
+      "type": "boolean",
+      "title": "Save full outputs",
+      "description": "Write the full text of each reduced tool result, secrets masked, under $XDG_CACHE_HOME/factrail/outputs (owner-only, pruned after 30 days).",
+      "default": true
+    },
+    "recordDecisions": {
+      "type": "boolean",
+      "title": "Record decisions",
+      "description": "Append each judged request and its answers to $XDG_DATA_HOME/factrail/decisions for evaluation and training. Never for a tainted session.",
+      "default": true
+    }
+  }
+}
