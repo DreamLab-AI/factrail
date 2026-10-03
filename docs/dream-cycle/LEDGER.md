@@ -6,3 +6,4 @@ says why.
 
 | date | slot | verdict | finding |
 |---|---|---|---|
+| 2026-10-03 | hook-policy | VETOED: Given a session whose only fence-relevant event is a `Skill` call loadin | NONE | NONE | yes | BLOCKED-ENV |  | e958dccddec6 |  |  |  |
