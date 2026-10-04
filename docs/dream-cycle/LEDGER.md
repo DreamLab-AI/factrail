@@ -8,3 +8,4 @@ says why.
 |---|---|---|---|
 | 2026-10-03 | hook-policy | VETOED: Given a session whose only fence-relevant event is a `Skill` call loadin | NONE | NONE | yes | BLOCKED-ENV |  | e958dccddec6 |  |  |  |
 | 2026-10-04 | evaluation-and-data | VETOED: INCONCLUSIVE — see report | NONE | NONE | yes | INCONCLUSIVE |  | ec7fee20a5f5 |  |  |  |
+| 2026-10-04 | evaluation-and-data | VETOED: Given `facts::labels` tests each argument token against later assistant  | NONE | NONE | yes | INCONCLUSIVE |  | 6e7f4cc0dc24 |  |  |  |
