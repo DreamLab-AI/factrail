@@ -10,3 +10,4 @@ says why.
 | 2026-10-04 | evaluation-and-data | VETOED: INCONCLUSIVE — see report | NONE | NONE | yes | INCONCLUSIVE |  | ec7fee20a5f5 |  |  |  |
 | 2026-10-04 | evaluation-and-data | VETOED: Given `facts::labels` tests each argument token against later assistant  | NONE | NONE | yes | INCONCLUSIVE |  | 6e7f4cc0dc24 |  |  |  |
 | 2026-10-05 | fact-rails | Given a reproducible read longer than tier-0 `read_keep` (3000 chars) whose outp | NONE | NONE | yes | INCONCLUSIVE |  | 81946cf04eff |  |  |  |
+| 2026-10-06 | token-value-and-pooling | VETOED: Given a token that `toks` admits from a result (e.g. `9f3c2ab1`), when ` | NONE | VETOED | yes | REJECT |  | 834133dd7868 |  |  |  |
