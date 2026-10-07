@@ -11,3 +11,4 @@ says why.
 | 2026-10-04 | evaluation-and-data | VETOED: Given `facts::labels` tests each argument token against later assistant  | NONE | NONE | yes | INCONCLUSIVE |  | 6e7f4cc0dc24 |  |  |  |
 | 2026-10-05 | fact-rails | Tier-0 read_keep hypothesis untested: no candidate patch; baseline all passed | NONE | NONE | yes | INCONCLUSIVE |  | 81946cf04eff |  |  |  |
 | 2026-10-06 | token-value-and-pooling | VETOED: Given a token that `toks` admits from a result (e.g. `9f3c2ab1`), when ` | NONE | VETOED | yes | REJECT |  | 834133dd7868 |  |  |  |
+| 2026-10-07 | judge-and-egress | Egress::Metadata leaks no argument value at any fit_state stage; pinned by test | NONE | https://github.com/DreamLab-AI/factrail/pull/1 | yes | ACCEPT |  | 6fb5c147007d |  |  |  |
