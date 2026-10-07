@@ -588,6 +588,35 @@ mod tests {
     }
 
     #[test]
+    fn metadata_egress_holds_through_every_shrink_stage() {
+        let ms = transcript(30, 2000);
+        let calls = collect_tool_calls(&ms, 6);
+        let meta = |max: usize| FitOptions {
+            egress: Egress::Metadata,
+            ..opts(max)
+        };
+        // Non-vacuity: the same transcript under `Egress::Full` does egress values.
+        let full_egress = fit_state(&ms, &calls, &opts(10_000_000))
+            .unwrap()
+            .state
+            .to_string();
+        assert!(full_egress.contains("cargo build"));
+        let full = fit_state(&ms, &calls, &meta(10_000_000)).unwrap().tokens;
+        let mut budget = full;
+        let mut saw_shrunk = false;
+        while budget > 128 {
+            if let Ok(f) = fit_state(&ms, &calls, &meta(budget)) {
+                let s = f.state.to_string();
+                assert!(!s.contains("cargo"), "stage {}, budget {budget}: {s}", f.stage);
+                assert!(!s.contains("xxxx"), "stage {}, budget {budget}: {s}", f.stage);
+                saw_shrunk |= f.stage != "full";
+            }
+            budget /= 2;
+        }
+        assert!(saw_shrunk, "no shrink stage was reached");
+    }
+
+    #[test]
     fn windows_when_history_cannot_fit() {
         let ms = transcript(30, 3000);
         let calls = collect_tool_calls(&ms, 6);
