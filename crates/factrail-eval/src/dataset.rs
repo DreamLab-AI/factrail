@@ -268,6 +268,10 @@ pub fn sft(record: &Record) -> Value {
 pub struct Manifest {
     /// Records per split and answer key (`train/true`, …).
     pub counts: BTreeMap<String, usize>,
+    /// Records per split and label source (`train/hindsight`, `dev/teacher`, …):
+    /// the manifest itself must witness a dataset's teacher-labelled share.
+    #[serde(default)]
+    pub labels: BTreeMap<String, usize>,
     /// SHA-256 (first six bytes, hex) of every file written.
     pub files: BTreeMap<String, String>,
     /// Distinct transcripts per split.
@@ -319,6 +323,10 @@ pub fn write(dir: &Path, records: &[(Split, Record)]) -> io::Result<Manifest> {
             *manifest
                 .counts
                 .entry(format!("{}/{}", split.name(), r.answer_key))
+                .or_default() += 1;
+            *manifest
+                .labels
+                .entry(format!("{}/{}", split.name(), r.source.label))
                 .or_default() += 1;
         }
         let transcripts: std::collections::BTreeSet<&str> =
@@ -392,6 +400,8 @@ mod tests {
         let recs = teacher_records(&[ex], 0.5, 0.0);
         let m = write(&dir, &recs).unwrap();
         assert_eq!(m.counts["train/true"], 1);
+        assert_eq!(m.labels["train/teacher"], 1);
+        assert_eq!(m.labels.len(), 1);
         assert!(write(&dir, &recs).is_err());
         #[cfg(unix)]
         {
