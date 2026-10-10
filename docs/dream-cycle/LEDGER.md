@@ -14,3 +14,4 @@ says why.
 | 2026-10-07 | judge-and-egress | Egress::Metadata leaks no argument value at any fit_state stage; pinned by test | NONE | https://github.com/DreamLab-AI/factrail/pull/1 | yes | ACCEPT |  | 6fb5c147007d |  |  |  |
 | 2026-10-08 | hook-policy | VETOED: Skill-call taint routed through skill_taints; qualified skill names now… | NONE | NONE | yes | BLOCKED-ENV |  | 591bca951eb8 |  |  |  |
 | 2026-10-09 | evaluation-and-data | Manifest now counts records per split AND label source; teacher share witnessed | NONE | https://github.com/DreamLab-AI/factrail/pull/2 | yes | ACCEPT |  | 81c488912ce7 |  |  |  |
+| 2026-10-10 | fact-rails | VETOED: taints_tool delegates Skill matching to skill_taints; qualified names… | NONE | NONE | yes | BLOCKED-ENV |  | 22e18ac94194 |  |  |  |
