@@ -500,6 +500,24 @@ mod tests {
     }
 
     #[test]
+    fn naming_a_token_in_input_or_user_raises_its_value() {
+        let text = "build 7f3a9c21e done in 412ms\nartifact at /srv/out/app-1.2.3.tar";
+        let base = ValueContext::default();
+        let v = token_values(text, &base);
+        let key = "7f3a9c21e";
+        let with_input = ValueContext {
+            input: key.to_owned(),
+            ..base.clone()
+        };
+        let with_user = ValueContext {
+            user: key.to_owned(),
+            ..base
+        };
+        assert!(token_values(text, &with_input)[key] > v[key]);
+        assert!(token_values(text, &with_user)[key] > v[key]);
+    }
+
+    #[test]
     fn contexts_track_reuse_and_distance() {
         use crate::model::{ToolResult, ToolUse};
         let mut input = serde_json::Map::new();
