@@ -909,3 +909,19 @@ fn keywords_are_trimmed_and_case_insensitive_and_egress_fails_toward_less() {
     assert_eq!(SwitchCommand::Help.as_str(), "help");
     assert_eq!(TriggerReason::NoUsage.as_str(), "no-usage");
 }
+
+// ── ADR-0001: skill names match through skill_taints ────────────────────────
+
+#[test]
+fn a_qualified_skill_call_taints_exactly_like_its_expansion() {
+    let c = Config::default();
+    assert!(skill_taints("agentbox:email-search", &c));
+    assert!(
+        taints_tool(&skill("agentbox:email-search"), &c),
+        "ADR-0001: the Skill branch must not be a second, bare-only matcher"
+    );
+    assert!(taints_tool(&skill("email-search"), &c));
+    assert!(!taints_tool(&skill("email-search-extra"), &c));
+    assert!(!taints_tool(&skill("plugin:other-skill"), &c));
+    assert!(!taints_tool(&tool("Skill"), &c));
+}
