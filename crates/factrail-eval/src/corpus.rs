@@ -204,4 +204,35 @@ mod tests {
         assert!(got[0].0.starts_with("cc-"));
         fs::remove_dir_all(&dir).unwrap();
     }
+
+    #[test]
+    fn skill_taints_match_bare_qualified_and_name_key_loads() {
+        let skills = vec!["email-search".to_owned()];
+        let load = |key: &str, name: &str| factrail_core::Message {
+            role: factrail_core::Role::Assistant,
+            text: String::new(),
+            tool_uses: vec![factrail_core::ToolUse {
+                tool_use_id: "t0".to_owned(),
+                tool: "Skill".to_owned(),
+                input: {
+                    let mut m = serde_json::Map::new();
+                    m.insert(
+                        key.to_owned(),
+                        serde_json::Value::String(name.to_owned()),
+                    );
+                    m
+                },
+                text: None,
+                is_error: false,
+            }],
+            tool_results: Vec::new(),
+        };
+        assert!(super::tainted(&[load("skill", "email-search")], &[], &skills));
+        assert!(super::tainted(&[load("skill", "team:email-search")], &[], &skills));
+        assert!(super::tainted(&[load("name", "email-search")], &[], &skills));
+        assert!(!super::tainted(&[load("skill", "web-search")], &[], &skills));
+        let mut plain = load("skill", "email-search");
+        plain.tool_uses[0].tool = "Bash".to_owned();
+        assert!(!super::tainted(&[plain], &[], &skills));
+    }
 }
