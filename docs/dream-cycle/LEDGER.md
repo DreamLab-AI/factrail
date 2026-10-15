@@ -18,3 +18,4 @@ says why.
 | 2026-10-11 | token-value-and-pooling | ctx.input/ctx.user naming strictly raises a token's value; pinned by test | NONE | https://github.com/DreamLab-AI/factrail/pull/3 | yes | ACCEPT |  | e832955e5bd3 |  |  |  |
 | 2026-10-13 | hook-policy | Skill-call taint routed via skill_taints; qualified skill names now taint | NONE | https://github.com/DreamLab-AI/factrail/pull/4 | yes | ACCEPT |  | 39e868464946 |  |  |  |
 | 2026-10-14 | evaluation-and-data | corpus::tainted fences qualified skill loads; pinned by test for ADR-001 routing | NONE | https://github.com/DreamLab-AI/factrail/pull/5 | yes | ACCEPT |  | 21b5791ab57a |  |  |  |
+| 2026-10-15 | fact-rails | Errored reproducible reads rail as observations, never rerun notes; pinned | NONE | https://github.com/DreamLab-AI/factrail/pull/6 | yes | ACCEPT |  | 2f9099b288df |  |  |  |
