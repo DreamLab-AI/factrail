@@ -74,3 +74,14 @@ One wire format.
 `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`,
 `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`, the plugin's tests, and
 `factrail eval --synthetic 40 --gate eval/baseline.json`.
+
+## Disposition — 2026-10-17
+
+ADR-001 completed by PR #4 (hook-policy, 2026-10-13): all skill-name taint matching now goes
+through `skill_taints` (qualification-tolerant, fail-closed). The 2026-10-03 "already
+implemented" assessment did not hold at `6bd15844`: the `Skill`-call branch of `taints_tool`
+(`crates/factrail-policy/src/taint.rs`) was a bare-equality second matcher until PR #4, so a
+plugin-qualified call such as `agentbox:email-search` did not taint while its expansion did.
+`implementation_status` stays `complete`, now true. Pinned by
+`a_qualified_skill_call_taints_exactly_like_its_expansion` (`crates/factrail-policy/tests/policy.rs`);
+PR #5 extends the same fence to `corpus::tainted` in `factrail-eval`.
