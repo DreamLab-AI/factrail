@@ -755,4 +755,76 @@ mod tests {
                 .contains("fatal: refused port 5432")
         );
     }
+
+    // Pin (fact-rails, 2026-10-15): an errored reproducible read is reduced by
+    // the observation rails, never to a one-line re-run note (reduce_uncached
+    // requires !is_error on the re-run path), so its head, tail and fact lines
+    // stay.
+    #[test]
+    fn errored_reproducible_read_keeps_its_rails_not_a_rerun_note() {
+        use crate::calls::collect_tool_calls;
+        use crate::model::{Role, ToolResult, ToolUse};
+        use serde_json::{Map, Value};
+
+        let mut input = Map::new();
+        input.insert(
+            "command".into(),
+            Value::String("git log --oneline -5 && git status".into()),
+        );
+        assert!(reproducible("Bash", &input));
+        let noise = "filler noise without digits or codes\n";
+        let mut result = noise.repeat(60);
+        result.push_str("exit code 127\n");
+        result.push_str(&noise.repeat(160));
+        let ms = vec![
+            Message::text(Role::User, "go"),
+            Message {
+                role: Role::Assistant,
+                text: String::new(),
+                tool_uses: vec![ToolUse {
+                    tool_use_id: "c1".into(),
+                    tool: "Bash".into(),
+                    input,
+                    text: None,
+                    is_error: false,
+                }],
+                tool_results: vec![],
+            },
+            Message {
+                role: Role::User,
+                text: String::new(),
+                tool_uses: vec![],
+                tool_results: vec![ToolResult {
+                    tool_use_id: "c1".into(),
+                    text: result,
+                    is_error: true,
+                }],
+            },
+            Message::text(Role::Assistant, "done"),
+        ];
+        let calls = collect_tool_calls(&ms, 1);
+        let mut actions: HashMap<&str, Action> = HashMap::new();
+        actions.insert("c1", Action::DropResult);
+        let out = apply(
+            &ms,
+            &calls,
+            &actions,
+            200,
+            Selection {
+                value: false,
+                pool: false,
+                contain: false,
+            },
+            Reduction {
+                target: 0.3,
+                hard: 0.0,
+            },
+        );
+        let stub = &out.messages[2].tool_results[0].text;
+        assert!(is_compacted(stub));
+        // Not a one-line re-run note: the stub keeps the error head and tail.
+        assert!(clen(stub) > 1000, "stub is {} chars", clen(stub));
+        // The fact line chosen from the middle survives.
+        assert!(stub.contains("exit code 127"));
+    }
 }
