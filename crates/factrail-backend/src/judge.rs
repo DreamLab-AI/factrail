@@ -525,10 +525,7 @@ async fn send(post: reqwest::RequestBuilder, api_key: Option<&str>) -> Result<Va
         // were redacted (OutputStore::save redacts before its cap, too).
         let clean = redact(&text, &known).0;
         let head: String = clean.chars().take(STATUS_BODY_CHARS).collect();
-        return Err(JudgeError::Status {
-            code,
-            body: head,
-        });
+        return Err(JudgeError::Status { code, body: head });
     }
     serde_json::from_str(&text)
         .map_err(|e| JudgeError::Malformed(format!("response is not JSON ({e})")))
