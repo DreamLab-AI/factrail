@@ -64,7 +64,10 @@ pub struct TaintScan {
 ///
 /// A prefix match on the tool name, anchored at the start — an MCP server's
 /// every tool shares its `mcp__<server>__` prefix, and a prefix cannot be
-/// mis-anchored the way a pattern can — or a `Skill` call loading a listed skill.
+/// mis-anchored the way a pattern can — or a `Skill` call loading a listed
+/// skill. Skill names are matched only by [`skill_taints`] — one matcher,
+/// qualification-tolerant, fail-closed (ADR-001) — so a plugin-qualified
+/// `Skill` call taints exactly as its expansion does.
 ///
 /// ```
 /// use factrail_policy::{Config, ToolRef, taints_tool};
@@ -73,6 +76,10 @@ pub struct TaintScan {
 /// let other = ToolRef { tool: "mcp__other__mcp__email-gateway__x".into(), skill: None };
 /// assert!(taints_tool(&email, &config));
 /// assert!(!taints_tool(&other, &config));
+/// let q = ToolRef { tool: "Skill".into(), skill: Some("agentbox:email-search".into()) };
+/// assert!(taints_tool(&q, &config), "a qualified listed skill taints (ADR-001)");
+/// let near = ToolRef { tool: "Skill".into(), skill: Some("email-search-extra".into()) };
+/// assert!(!taints_tool(&near, &config));
 /// ```
 pub fn taints_tool(tool: &ToolRef, config: &Config) -> bool {
     let name = tool.tool.as_str();
@@ -84,10 +91,10 @@ pub fn taints_tool(tool: &ToolRef, config: &Config) -> bool {
         return true;
     }
     name == "Skill"
-        && config
-            .taint_skills
-            .iter()
-            .any(|s| s == tool.skill.as_deref().unwrap_or(""))
+        && tool
+            .skill
+            .as_deref()
+            .is_some_and(|s| skill_taints(s, config))
 }
 
 /// Does a skill expansion taint the session? The bare name or a
