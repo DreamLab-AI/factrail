@@ -228,6 +228,29 @@ async fn system_one_status_is_reported_with_a_short_body() {
 }
 
 #[tokio::test]
+async fn status_body_is_redacted_before_it_is_truncated() {
+    // The echoed key straddles the 200-char boundary: truncating before
+    // redacting would leak its first 20 characters into the error body.
+    let body = format!("{}{KEY}{}", "x".repeat(180), "y".repeat(300));
+    let server = serve(move |_| (503, body.clone(), Duration::ZERO)).await;
+    let err = system_one(&server.url, Some(KEY))
+        .ask(&request(&["t1"], "g"))
+        .await
+        .unwrap_err();
+    match &err {
+        JudgeError::Status { code, body } => {
+            assert_eq!(*code, 503);
+            assert!(
+                !body.contains("ts-secret-key"),
+                "partial api key leaked into the error body: {body}"
+            );
+        }
+        other => panic!("expected a status error, got {other:?}"),
+    }
+    assert_eq!(err.reason(), "status");
+}
+
+#[tokio::test]
 async fn system_one_malformed_responses() {
     for body in ["not json at all", r#"{"answers": []}"#, r#"{"result": 1}"#] {
         let body = body.to_owned();

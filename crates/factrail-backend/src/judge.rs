@@ -520,11 +520,12 @@ async fn send(post: reqwest::RequestBuilder, api_key: Option<&str>) -> Result<Va
     let text = response.text().await.map_err(transport)?;
     if !(200..300).contains(&code) {
         let known: Vec<&str> = api_key.into_iter().collect();
-        let head: String = text.chars().take(STATUS_BODY_CHARS).collect();
-        return Err(JudgeError::Status {
-            code,
-            body: redact(&head, &known).0,
-        });
+        // Redact the whole body before cutting it to size: a credential that
+        // straddles the 200-character boundary would leak if only the head
+        // were redacted (OutputStore::save redacts before its cap, too).
+        let clean = redact(&text, &known).0;
+        let head: String = clean.chars().take(STATUS_BODY_CHARS).collect();
+        return Err(JudgeError::Status { code, body: head });
     }
     serde_json::from_str(&text)
         .map_err(|e| JudgeError::Malformed(format!("response is not JSON ({e})")))
