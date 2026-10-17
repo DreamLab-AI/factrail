@@ -90,7 +90,11 @@ pub fn taints_tool(tool: &ToolRef, config: &Config) -> bool {
     {
         return true;
     }
-    name == "Skill" && tool.skill.as_deref().is_some_and(|s| skill_taints(s, config))
+    name == "Skill"
+        && tool
+            .skill
+            .as_deref()
+            .is_some_and(|s| skill_taints(s, config))
 }
 
 /// Does a skill expansion taint the session? The bare name or a
