@@ -216,10 +216,7 @@ mod tests {
                 tool: "Skill".to_owned(),
                 input: {
                     let mut m = serde_json::Map::new();
-                    m.insert(
-                        key.to_owned(),
-                        serde_json::Value::String(name.to_owned()),
-                    );
+                    m.insert(key.to_owned(), serde_json::Value::String(name.to_owned()));
                     m
                 },
                 text: None,
@@ -227,10 +224,26 @@ mod tests {
             }],
             tool_results: Vec::new(),
         };
-        assert!(super::tainted(&[load("skill", "email-search")], &[], &skills));
-        assert!(super::tainted(&[load("skill", "team:email-search")], &[], &skills));
-        assert!(super::tainted(&[load("name", "email-search")], &[], &skills));
-        assert!(!super::tainted(&[load("skill", "web-search")], &[], &skills));
+        assert!(super::tainted(
+            &[load("skill", "email-search")],
+            &[],
+            &skills
+        ));
+        assert!(super::tainted(
+            &[load("skill", "team:email-search")],
+            &[],
+            &skills
+        ));
+        assert!(super::tainted(
+            &[load("name", "email-search")],
+            &[],
+            &skills
+        ));
+        assert!(!super::tainted(
+            &[load("skill", "web-search")],
+            &[],
+            &skills
+        ));
         let mut plain = load("skill", "email-search");
         plain.tool_uses[0].tool = "Bash".to_owned();
         assert!(!super::tainted(&[plain], &[], &skills));
