@@ -65,13 +65,18 @@ pub struct TaintScan {
 /// A prefix match on the tool name, anchored at the start — an MCP server's
 /// every tool shares its `mcp__<server>__` prefix, and a prefix cannot be
 /// mis-anchored the way a pattern can — or a `Skill` call loading a listed skill.
+/// The skill match goes through [`skill_taints`], so a plugin-qualified name
+/// (`some-plugin:email-search`) taints exactly like the same skill loaded as
+/// a slash command.
 ///
 /// ```
 /// use factrail_policy::{Config, ToolRef, taints_tool};
 /// let config = Config::default();
 /// let email = ToolRef { tool: "mcp__email-gateway__ask_email".into(), skill: None };
 /// let other = ToolRef { tool: "mcp__other__mcp__email-gateway__x".into(), skill: None };
+/// let call = ToolRef { tool: "Skill".into(), skill: Some("agentbox:email-search".into()) };
 /// assert!(taints_tool(&email, &config));
+/// assert!(taints_tool(&call, &config));
 /// assert!(!taints_tool(&other, &config));
 /// ```
 pub fn taints_tool(tool: &ToolRef, config: &Config) -> bool {
@@ -83,11 +88,7 @@ pub fn taints_tool(tool: &ToolRef, config: &Config) -> bool {
     {
         return true;
     }
-    name == "Skill"
-        && config
-            .taint_skills
-            .iter()
-            .any(|s| s == tool.skill.as_deref().unwrap_or(""))
+    name == "Skill" && skill_taints(tool.skill.as_deref().unwrap_or(""), config)
 }
 
 /// Does a skill expansion taint the session? The bare name or a

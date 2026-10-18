@@ -909,3 +909,19 @@ fn keywords_are_trimmed_and_case_insensitive_and_egress_fails_toward_less() {
     assert_eq!(SwitchCommand::Help.as_str(), "help");
     assert_eq!(TriggerReason::NoUsage.as_str(), "no-usage");
 }
+
+// ── ADR-001: the Skill call and its expansion taint alike ───────────────────
+
+#[test]
+fn a_qualified_skill_call_taints_exactly_like_its_expansion() {
+    let c = Config::default();
+    for tainted in ["email-search", "agentbox:email-search", "a:b:email-search"] {
+        assert!(skill_taints(tainted, &c), "{tainted}");
+        assert!(taints_tool(&skill(tainted), &c), "{tainted}");
+        assert!(scan_taint(&[tool("Read"), skill(tainted)], &c).tainted, "{tainted}");
+    }
+    for clean in ["email-search-extra", "agentbox:email-search-extra", "diagrams-as-code"] {
+        assert!(!skill_taints(clean, &c), "{clean}");
+        assert!(!taints_tool(&skill(clean), &c), "{clean}");
+    }
+}
