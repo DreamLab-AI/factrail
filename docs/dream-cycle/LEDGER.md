@@ -19,3 +19,6 @@ says why.
 | 2026-10-13 | hook-policy | Skill-call taint routed via skill_taints; qualified skill names now taint | NONE | https://github.com/DreamLab-AI/factrail/pull/4 | yes | ACCEPT |  | 39e868464946 |  |  |  |
 | 2026-10-14 | evaluation-and-data | corpus::tainted fences qualified skill loads; pinned by test for ADR-001 routing | NONE | https://github.com/DreamLab-AI/factrail/pull/5 | yes | ACCEPT |  | 21b5791ab57a |  |  |  |
 | 2026-10-15 | fact-rails | Errored reproducible reads rail as observations, never rerun notes; pinned | NONE | https://github.com/DreamLab-AI/factrail/pull/6 | yes | ACCEPT |  | 2f9099b288df |  |  |  |
+| 2026-10-17 | judge-and-egress | Judge error bodies redact before the 200-char cut; straddling keys cannot leak | NONE | https://github.com/DreamLab-AI/factrail/pull/7 | yes | ACCEPT |  | 53457d73da64 |  |  |  |
+| 2026-10-18 | hook-policy | taints_tool Skill branch still bare at this base; routed via skill_taints | NONE | https://github.com/DreamLab-AI/factrail/pull/8 | yes | ACCEPT |  | aa1e532bc688 |  |  |  |
+| 2026-10-19 | evaluation-and-data | VETOED: corpus::tainted skill match routed via the policy's single matcher… | NONE | NONE | yes | INCONCLUSIVE |  | adf48aeebe3d |  |  |  |
