@@ -449,7 +449,7 @@ static LONG_LISTING: LazyLock<Regex> = LazyLock::new(|| re(r"^ls\s+(?:\S+\s+)*-[
 /// Markers in a read's output that make it an observation (a failure, a timeout, a background job).
 static READ_OBSERVATION: LazyLock<Regex> = LazyLock::new(|| {
     re(
-        r"\b(?:errno|os error|timed? ?out|timeout|permission denied|access is denied|no such file|cannot find|not found|running in background|background with id|exit code [1-9]|killed)\b",
+        r"\b(?:errno|os error|timed? ?out|timeout|permission denied|access is denied|no such file|cannot find|not found|running in background|background with id|exit code [1-9][0-9]*|killed)\b",
         true,
     )
 });
@@ -524,6 +524,23 @@ pub fn reproducible(tool: &str, input: &Map<String, Value>) -> bool {
         }
         READ_VERBS.contains(&verb.as_str())
     })
+}
+
+#[cfg(test)]
+mod read_observation_tests {
+    use super::*;
+
+    /// `exit code 127` (command not found) and any other multi-digit nonzero
+    /// exit code report a failure: the read that printed one is an observation,
+    /// because re-running the command would not give that output back.
+    #[test]
+    fn nonzero_exit_codes_of_any_width_are_observations() {
+        for code in ["exit code 1", "exit code 10", "exit code 127", "exit code 255"] {
+            let out = format!("listing files\n{code}\nfinished");
+            assert!(READ_OBSERVATION.is_match(&out), "{code} is an observation");
+        }
+        assert!(!READ_OBSERVATION.is_match("ok\nexit code 0\nok"));
+    }
 }
 
 /// True when a read's output reports a failure, a timeout or a background job,
