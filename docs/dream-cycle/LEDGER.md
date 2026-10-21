@@ -23,3 +23,4 @@ says why.
 | 2026-10-18 | hook-policy | taints_tool Skill branch still bare at this base; routed via skill_taints | NONE | https://github.com/DreamLab-AI/factrail/pull/8 | yes | ACCEPT |  | aa1e532bc688 |  |  |  |
 | 2026-10-19 | evaluation-and-data | VETOED: corpus::tainted skill match routed via the policy's single matcher… | NONE | NONE | yes | INCONCLUSIVE |  | adf48aeebe3d |  |  |  |
 | 2026-10-20 | fact-rails | READ_OBSERVATION: exit code [1-9] misses 127/137; widened to [1-9][0-9]*, pinned | NONE | https://github.com/DreamLab-AI/factrail/pull/9 | yes | ACCEPT |  | 4d0e47a0537c |  |  |  |
+| 2026-10-21 | token-value-and-pooling | error pieces kept by value_parts pre-phase even with zero token value; pinned | NONE | https://github.com/DreamLab-AI/factrail/pull/10 | yes | ACCEPT |  | cd93db337312 |  |  |  |
