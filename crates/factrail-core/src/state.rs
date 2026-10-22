@@ -138,10 +138,11 @@ fn compact_call(call: &ToolCall, egress: Egress) -> String {
             })
             .collect::<Vec<_>>()
             .join(" "),
-        Egress::Metadata => format!(
-            "keys={}",
-            call.input.keys().cloned().collect::<Vec<_>>().join(",")
-        ),
+        Egress::Metadata => {
+            let mut keys: Vec<&str> = call.input.keys().map(String::as_str).collect();
+            keys.sort();
+            format!("keys={}", keys.join(","))
+        }
     };
     format!(
         "{} {} {} → {} {}ch",
@@ -604,5 +605,25 @@ mod tests {
         for group in &g.groups {
             assert!(group.state.tokens <= 700);
         }
+    }
+
+    #[test]
+    fn compact_metadata_keys_are_sorted_like_metadata_input() {
+        let mut input = Map::new();
+        input.insert("z".into(), Value::String("1".into()));
+        input.insert("a".into(), Value::String("2".into()));
+        let call = ToolCall {
+            id: "t9".into(),
+            tool_use_id: "toolu_9".into(),
+            tool: "Bash".into(),
+            input,
+            call_index: 1,
+            result_index: 2,
+            result_chars: 5,
+            is_error: false,
+            pinned: false,
+        };
+        assert_eq!(compact_call(&call, Egress::Metadata), "t9 Bash keys=a,z → ok 5ch");
+        assert_eq!(compact_call(&call, Egress::Full), "t9 Bash z=1 a=2 → ok 5ch");
     }
 }
