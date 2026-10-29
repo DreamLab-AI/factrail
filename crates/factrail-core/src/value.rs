@@ -631,4 +631,22 @@ mod tests {
             - pre(&pb);
         assert!(after <= before, "{after} > {before}");
     }
+
+    #[test]
+    fn a_valueless_error_piece_survives_a_tight_cap() {
+        let mut text: String = (0..30)
+            .map(|i| format!("row {i} id=ab{i:06}cd files\n"))
+            .collect();
+        text.push_str("error: out of memory\n");
+        let values = token_values(&text, &ValueContext::default());
+        let parts = value_parts(&text, 300, &values);
+        let kept = parts.lines(&parts.greedy);
+        let cap = crate::rails::lines_chars(&fact_lines(&text, 300));
+        assert!(
+            kept.iter().any(|l| l.contains("error")),
+            "the error piece is kept before the greedy spends the cap"
+        );
+        assert!(kept.len() < parts.units.len(), "the cap forces drops");
+        assert!(crate::rails::lines_chars(&kept) <= cap);
+    }
 }
