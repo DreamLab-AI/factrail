@@ -98,13 +98,20 @@ Request: `config`, `args`, `store` (`enabled`, `taint`, `last`), `usage`, `basel
 binary checks its own environment).
 Response: `text`, and `store.enabled` (bool to write, or null).
 
+`text` names the endpoint (the configured `baseUrl`, else the backend's default marked
+`(default)`). When `config.baseUrl` is set and the backend is a model, it also carries a
+`live backend:` line: `GET <origin of baseUrl>/health` with a 2 s timeout (well inside the
+plugin's 10 s status deadline), then the model of the newest decision record. An
+unreachable proxy gives `live backend: unknown (proxy unreachable: <why>)`. Nothing is sent
+to a default vendor endpoint to answer a status.
+
 ## Files the binary writes
 
 | path | what | mode |
 |---|---|---|
 | `$XDG_CACHE_HOME/factrail/outputs/<session>/<tool_use_id>.txt` | full output of each reduced result, secrets masked | dir 0700, file 0600 |
 | `$XDG_CACHE_HOME/factrail/answers/<session>.json` | the judge's answers per `tool_use_id`, so a call is never asked about twice; capped at 20,000, regenerable | 0600 |
-| `$XDG_DATA_HOME/factrail/decisions/<YYYY-MM-DD>.jsonl` | each judged request and its answers, for evaluation and training; never for a tainted session | 0600 |
+| `$XDG_DATA_HOME/factrail/decisions/<YYYY-MM-DD>.jsonl` | each judged request and its answers, for evaluation and training; never for a tainted session. `judge.model` is the model the response reported, `judge.backend` the System One proxy's `x-system-one-backend` header (absent in older records) | 0600 |
 
 Saved outputs older than 30 days are deleted at most once a day. `$XDG_*` default to
 `~/.cache` and `~/.local/share`.

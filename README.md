@@ -63,6 +63,21 @@ cargo build --release
 Judges and running one locally: [docs/local-judge.md](docs/local-judge.md). The decision
 record: [docs/adr/ADR-001-factrail.md](docs/adr/ADR-001-factrail.md).
 
+## Which judge answered
+
+`/factrail status` prints the real endpoint (the configured `baseUrl`, or the vendor default
+marked `(default)`), and, for a `baseUrl` you set, a `live backend:` line read from the
+proxy's `GET /health`, so it follows an operator's live backend switch. `/health` names no
+model, so the same line adds the model the latest decision record saw answer
+(`last judged by jev-1.14.0 on typesafe 7m ago`). An unreachable proxy prints
+`live backend: unknown (proxy unreachable: …)` and nothing else changes; the vendor cloud
+is never probed.
+
+Each decision-log record's `judge` carries the model the response reported (falling back to
+the configured `model` when it reports none) and, from the System One proxy's
+`x-system-one-backend` response header, the `backend` that answered. Both are read from the
+judge response itself, so they cost no extra request and stay right after a switch.
+
 ## The boundary
 
 A session that used a fenced tool (by default the private email gateway, Gmail and the
