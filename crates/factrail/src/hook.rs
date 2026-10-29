@@ -8,7 +8,7 @@ use serde_json::{Map, Value, json};
 
 use factrail_backend::{
     AnswerStore, DecisionLog, DecisionRecord, JudgeError, OutputStore, Paths, RecordedRequest,
-    ask_all,
+    ask_all, health,
 };
 use factrail_core::{
     CompactOptions, Egress, Message, Outcome, Plan, Pressure, RAIL_FLOOR, Selection, pressure,
@@ -286,6 +286,56 @@ fn compact(request: &Value) -> Result<Value, String> {
     Ok(body)
 }
 
+/// How long `/factrail status` waits for the proxy's `/health`: far inside the
+/// shim's 10 s status deadline, so a dead proxy never turns into "binary failed".
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// A past instant as a short age: `42s ago`, `7m ago`, `3h ago`, `2d ago`.
+fn age(then_ms: u64, now: i64) -> String {
+    let secs = (now.max(0) as u64).saturating_sub(then_ms) / 1000;
+    match secs {
+        0..=89 => format!("{secs}s ago"),
+        90..=5399 => format!("{}m ago", (secs + 30) / 60),
+        5400..=172_799 => format!("{}h ago", (secs + 1800) / 3600),
+        _ => format!("{}d ago", secs / 86_400),
+    }
+}
+
+/// The status line naming who judges now. `None` unless a model backend has an
+/// explicit `baseUrl`: the vendor cloud is never probed. The proxy's `/health`
+/// names the live backend, which follows an operator's live switch; it carries
+/// no model, so the model shown is the last one a decision record saw answer.
+/// Fails open: an unreachable proxy yields an "unknown" line, never an error.
+fn live_judge_line(config: &Config, paths: Option<&Paths>) -> Option<String> {
+    let base_url = config
+        .base_url
+        .as_deref()
+        .filter(|_| config.backend != Backend::Rules)?;
+    let probed = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())
+        .and_then(|rt| rt.block_on(health(base_url, HEALTH_TIMEOUT)));
+    let live = match probed {
+        Ok(h) => format!("live backend: {}", h.backend),
+        Err(why) => format!("live backend: unknown (proxy unreachable: {why})"),
+    };
+    let last = match paths.and_then(|p| DecisionLog::new(p).latest()) {
+        Some(record) => format!(
+            "last judged by {}{} {}",
+            record.judge.model,
+            record
+                .judge
+                .backend
+                .map(|b| format!(" on {b}"))
+                .unwrap_or_default(),
+            age(record.ts_ms, now_ms())
+        ),
+        None => "no judged compaction recorded yet".to_owned(),
+    };
+    Some(format!("{live} · {last}"))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_compaction(
     config: &Config,
@@ -364,7 +414,7 @@ fn run_compaction(
                         let record = DecisionRecord {
                             ts_ms: now_ms() as u64,
                             session: session_id.to_owned(),
-                            judge: judge.info(),
+                            judge: judge.info().observed(&answered),
                             egress: config.egress.as_str().to_owned(),
                             goal: None,
                             requests: recorded,
@@ -639,14 +689,13 @@ fn status(request: &Value) -> Value {
             verdict.reason
         ),
     };
-    let endpoint = match config.backend {
-        Backend::Rules => "none (rules)".to_owned(),
-        _ => config
-            .base_url
-            .clone()
-            .unwrap_or_else(|| "vendor cloud (default)".to_owned()),
-    };
     let paths = Paths::from_env();
+    let endpoint = match (config.backend, judges::build(&config)) {
+        (Backend::Rules, _) | (_, None) => "none (rules)".to_owned(),
+        (_, Some(judge)) if config.base_url.is_some() => judge.info().endpoint,
+        (_, Some(judge)) => format!("{} (default)", judge.info().endpoint),
+    };
+    let live_line = live_judge_line(&config, paths.as_ref());
     let mut lines = vec![
         format!(
             "factrail {}: {}{} · backend {} · keep ≥ {} · fallback {}",
@@ -700,6 +749,9 @@ fn status(request: &Value) -> Value {
             None => "saved outputs and decision log: no home directory found".to_owned(),
         },
     ];
+    if let Some(live) = live_line {
+        lines.insert(4, live);
+    }
     if scan.tainted {
         lines.push(format!(
             "session tainted: {} call(s): {}",
