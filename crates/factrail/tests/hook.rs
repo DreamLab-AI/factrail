@@ -1,6 +1,7 @@
 //! The hook protocol end to end: requests piped into the built binary.
 
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
@@ -220,4 +221,142 @@ fn taint_event_and_status() {
     let text = s["text"].as_str().unwrap();
     assert!(text.contains("OFF (saved)"), "{text}");
     assert!(text.contains("built-in summary (switched-off)"), "{text}");
+}
+
+/// A fake System One proxy on a loopback port: `POST` answers every question
+/// with `noul` 0.9 and names its model and backend; `GET /health` names the
+/// backend. Serves until the process ends.
+fn fake_proxy(backend: &'static str, model: &'static str) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/v1/systemone", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 8192];
+            let (head, body) = loop {
+                let n = stream.read(&mut chunk).unwrap_or(0);
+                if n == 0 {
+                    break (String::new(), Vec::new());
+                }
+                buf.extend_from_slice(&chunk[..n]);
+                let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") else {
+                    continue;
+                };
+                let head = String::from_utf8_lossy(&buf[..i]).into_owned();
+                let want = head
+                    .lines()
+                    .find_map(|l| {
+                        l.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                    })
+                    .unwrap_or(0);
+                if buf.len() >= i + 4 + want {
+                    break (head, buf[i + 4..i + 4 + want].to_vec());
+                }
+            };
+            let body = if head.starts_with("GET /health") {
+                json!({ "ok": true, "backend": backend, "local": false }).to_string()
+            } else {
+                let asked: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+                let answers: serde_json::Map<String, Value> = asked["questions"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|(k, _)| (k.clone(), json!({ "noul": 0.9 })))
+                    .collect();
+                json!({ "answers": answers, "model": model }).to_string()
+            };
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nx-system-one-backend: {backend}\r\nx-system-one-model: jev-latest\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(reply.as_bytes());
+        }
+    });
+    url
+}
+
+#[test]
+fn the_decision_log_records_the_model_and_backend_that_answered() {
+    let home = Home::new("announce");
+    let url = fake_proxy("typesafe", "jev-1.14.0");
+    let config = json!({ "backend": "systemone", "baseUrl": url, "model": "subq-snap-preview", "apiKey": "sk-test-not-used-1234567890" });
+    let r = home.hook(
+        "compact",
+        &compact_request(config, session(8, false), json!({})),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    let dir = home.0.join("data/factrail/decisions");
+    let file = std::fs::read_dir(&dir)
+        .expect("a decision was logged")
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let line = std::fs::read_to_string(file).unwrap();
+    let record: Value = serde_json::from_str(line.lines().next().unwrap()).unwrap();
+    assert_eq!(
+        record["judge"]["model"], "jev-1.14.0",
+        "the response's model, not the configured one"
+    );
+    assert_eq!(record["judge"]["backend"], "typesafe");
+    assert_eq!(record["judge"]["endpoint"], url.as_str());
+}
+
+fn status_text(home: &Home, config: Value) -> String {
+    let s = home.hook("status", &json!({ "protocol": 1, "config": config, "args": "", "store": {}, "usage": { "tokens": 1000, "window": 200000 }, "tools": [] }));
+    s["text"].as_str().unwrap().to_owned()
+}
+
+#[test]
+fn status_names_the_live_backend_the_endpoint_and_the_last_judged_model() {
+    let home = Home::new("status-live");
+    let url = fake_proxy("subq", "jev-1.14.0");
+    let config =
+        json!({ "backend": "systemone", "baseUrl": url, "apiKey": "sk-test-not-used-1234567890" });
+    let before = status_text(&home, config.clone());
+    assert!(before.contains(&format!("endpoint: {url}")), "{before}");
+    assert!(before.contains("live backend: subq"), "{before}");
+    assert!(
+        before.contains("no judged compaction recorded yet"),
+        "{before}"
+    );
+    home.hook(
+        "compact",
+        &compact_request(config.clone(), session(8, false), json!({})),
+    );
+    let after = status_text(&home, config);
+    assert!(after.contains("last judged by jev-1.14.0"), "{after}");
+    assert!(!after.contains("vendor cloud"), "{after}");
+}
+
+#[test]
+fn status_fails_open_when_the_proxy_is_down_and_never_probes_the_default_cloud() {
+    let home = Home::new("status-down");
+    let dead = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/v1/systemone", dead.local_addr().unwrap());
+    drop(dead);
+    let text = status_text(&home, json!({ "backend": "systemone", "baseUrl": url }));
+    assert!(
+        text.contains("live backend: unknown (proxy unreachable"),
+        "{text}"
+    );
+    assert!(
+        text.contains("factrail 0.1.0"),
+        "the rest of the status still prints: {text}"
+    );
+
+    let default = status_text(&home, json!({ "backend": "systemone" }));
+    assert!(
+        default.contains("endpoint: https://api.typesafe.ai/v1/systemone (default)"),
+        "{default}"
+    );
+    assert!(
+        !default.contains("live backend"),
+        "no baseUrl, no probe: {default}"
+    );
+    let rules = status_text(&home, json!({ "backend": "rules" }));
+    assert!(rules.contains("endpoint: none (rules)"), "{rules}");
 }

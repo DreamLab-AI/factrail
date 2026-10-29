@@ -65,10 +65,12 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod health;
 pub mod judge;
 pub mod log;
 pub mod store;
 
+pub use health::{Health, health};
 pub use judge::{
     Answered, Judge, JudgeError, JudgeInfo, Outgoing, SYSTEM_ONE_MODEL, SYSTEM_ONE_URL,
     SystemOneJudge, TEV_CONCURRENCY, TevJudge, ask_all,
