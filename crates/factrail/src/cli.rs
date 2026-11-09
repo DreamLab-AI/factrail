@@ -27,12 +27,31 @@ pub enum Command {
     Eval(EvalArgs),
     /// Export Tev1-format training records labelled by hindsight.
     Dataset(DatasetArgs),
+    /// Count calls whose arguments carry the old inline stub, and which of them broke.
+    Stubs(StubsArgs),
     /// Manage saved full outputs.
     Outputs {
         /// What to do with them.
         #[command(subcommand)]
         action: OutputsAction,
     },
+}
+
+/// `stubs` arguments.
+#[derive(Debug, Args)]
+pub struct StubsArgs {
+    /// A Claude Code projects directory (default `~/.claude/projects`).
+    #[arg(long)]
+    pub claude_projects: Option<PathBuf>,
+    /// Only calls at or after this UTC time (`2026-11-09` or `2026-11-09T15:00`).
+    #[arg(long)]
+    pub since: Option<String>,
+    /// Sessions to list, worst first.
+    #[arg(long, default_value_t = 12)]
+    pub top: usize,
+    /// Exit non-zero when any stubbed call broke.
+    #[arg(long)]
+    pub check: bool,
 }
 
 /// `outputs` actions.

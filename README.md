@@ -60,6 +60,8 @@ cargo build --release
 ./target/release/factrail compact session.jsonl --out compacted.json
 # training records for a local judge, labelled by hindsight
 ./target/release/factrail dataset --claude-projects ~/.claude/projects --out data/tev-$(date +%F)
+# calls carrying the inline argument stub 0.1.0 wrote, and how many broke; --check fails on any
+./target/release/factrail stubs --since 2026-11-09T15:00 --check
 ```
 
 Judges and running one locally: [docs/local-judge.md](docs/local-judge.md). The decision

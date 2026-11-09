@@ -108,3 +108,9 @@ the call; it is left unchanged so the promotion-gate baselines stay comparable.
 Pinned by `drop_call_keeps_the_arguments` (`crates/factrail-core/src/apply.rs`), the
 `argument_stub` doctest, `taint_event_and_status` (`crates/factrail/tests/hook.rs`) and the
 plugin's `taint at the source` tests.
+
+Acceptance is measured, not asserted: `factrail stubs` (`crates/factrail-eval/src/stubs.rs`)
+counts calls whose arguments carry the stub and those whose result shows they broke. Across
+every transcript on the reference host on 2026-11-09 it found 406 broken calls in sessions
+before the fix, and none after 15:00 UTC that day. The finding closes when
+`factrail stubs --since <first boot on 0.1.2> --check` passes over a working week of sessions.
