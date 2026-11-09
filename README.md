@@ -13,7 +13,9 @@ verbatim? Only what the judge lets go is reduced, and reduced through **fact rai
   lines (errors, status codes, paths, versions, ids, counts, receipts) and its tail. The
   fact lines are chosen by learned token value, from one budget pooled across the whole
   compaction;
-- nothing is erased, and every reduced output is saved, secrets masked, one read away.
+- nothing is erased, and every reduced output is saved, secrets masked, one read away;
+- a call's **arguments are never rewritten**. Only results are reduced: arguments cut to an
+  inline stub taught the model to write the stub into new commands and files.
 
 ## Measured
 

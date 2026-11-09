@@ -88,8 +88,17 @@ check costs bytes, not megabytes.
 
 ## `factrail hook taint` — `tool.call` and `skill.prompt`
 
-Request: `config`, `tool` (or null), `skill` (or null), `store.taint`, `now`.
-Response: `taint` (a value to write, or null).
+Request: `config`, `tool` (or null), `skill` (or null), `input` (the call's arguments:
+the `tool.call` envelope without `tool`, `tool_use_id` and `agentId`; null for
+`skill.prompt`), `store.taint`, `now`.
+Response: `taint` (a value to write, or null) and `deny` (a string, or null).
+
+`deny` is set when any string in `input` carries the inline stub factrail up to 0.1.0 cut
+arguments to (an ellipsis, then a bracketed count followed by `chars`). The plugin
+returns it as the call's refusal, so the model rewrites the call instead of running a
+command or writing a file that ends in the stub. Compaction no longer rewrites arguments;
+the guard is for transcripts compacted before that, whose stubs the model goes on copying.
+Like every hook, a failure or timeout lets the call through.
 
 ## `factrail hook status` — `/factrail on|off|status`
 

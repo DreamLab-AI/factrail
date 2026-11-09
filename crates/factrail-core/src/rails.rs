@@ -73,10 +73,6 @@ pub const FACT_TAIL_CHARS: usize = 120;
 pub const FACT_BUDGET_CHARS: usize = 360;
 /// Head an error result keeps.
 pub const ERROR_KEEP_CHARS: usize = 2000;
-/// String arguments of a reduced call are cut to this.
-pub const INPUT_BRIEF_CHARS: usize = 200;
-/// String arguments of a reproducible read keep this much: enough to re-run it.
-pub const RERUN_INPUT_CHARS: usize = 160;
 
 /// How many fact patterns match `line`.
 pub fn fact_score(line: &str) -> usize {
@@ -532,48 +528,32 @@ pub fn read_is_observation(text: &str) -> bool {
     READ_OBSERVATION.is_match(text)
 }
 
-/// String fields of an argument value cut to `max` chars, recursively: a reduced
-/// call stays readable, not verbatim.
+/// The inline marker earlier factrail releases cut call arguments to: an ellipsis,
+/// then the count of chars removed in brackets followed by the word "chars".
+static ARGUMENT_STUB: LazyLock<Regex> = LazyLock::new(|| re(r"\u{2026}\[\d+ chars\]", false));
+
+/// Whether any string inside a call's arguments carries the inline stub that
+/// factrail up to 0.1.0 wrote into reduced arguments.
+///
+/// Compaction no longer rewrites arguments, but transcripts compacted before then
+/// still hold the stubs, and a model that has seen many of them reproduces the
+/// shape in new long arguments: a Bash command or a Write content that ends in the
+/// marker is corrupt. The `taint` hook refuses such a call so the model rewrites it.
 ///
 /// ```
-/// use factrail_core::rails::brief_input;
-/// let v = brief_input(&serde_json::json!({"a": "abcdefghijklmnopqrst", "n": 3}), 2);
-/// assert_eq!(v, serde_json::json!({"a": "ab…[18 chars]", "n": 3}));
-/// // A string only a little over the cap stays whole: the cut form would be longer.
-/// let v = brief_input(&serde_json::json!("abcdef"), 2);
-/// assert_eq!(v, serde_json::json!("abcdef"));
+/// use factrail_core::rails::argument_stub;
+/// let stub = format!("cat x\u{2026}[{} chars]", 40);
+/// assert!(argument_stub(&serde_json::json!({"command": stub})));
+/// assert!(argument_stub(&serde_json::json!({"edits": [{"new": stub}]})));
+/// assert!(!argument_stub(&serde_json::json!({"command": "echo \u{2026} [12 chars]"})));
 /// ```
-pub fn brief_input(value: &Value, max: usize) -> Value {
+pub fn argument_stub(value: &Value) -> bool {
     match value {
-        Value::String(s) => {
-            let len = clen(s);
-            if len <= max {
-                return value.clone();
-            }
-            // The cut string carries a suffix; cut only when the result is shorter.
-            let cut = format!("{}…[{} chars]", cslice(s, 0, max), len - max);
-            if clen(&cut) < len {
-                Value::String(cut)
-            } else {
-                value.clone()
-            }
-        }
-        Value::Array(items) => Value::Array(items.iter().map(|v| brief_input(v, max)).collect()),
-        Value::Object(map) => Value::Object(
-            map.iter()
-                .map(|(k, v)| (k.clone(), brief_input(v, max)))
-                .collect(),
-        ),
-        other => other.clone(),
+        Value::String(s) => ARGUMENT_STUB.is_match(s),
+        Value::Array(items) => items.iter().any(argument_stub),
+        Value::Object(map) => map.values().any(argument_stub),
+        _ => false,
     }
-}
-
-/// [`brief_input`] over a whole argument map.
-pub fn brief_map(input: &Map<String, Value>, max: usize) -> Map<String, Value> {
-    input
-        .iter()
-        .map(|(k, v)| (k.clone(), brief_input(v, max)))
-        .collect()
 }
 
 #[cfg(test)]

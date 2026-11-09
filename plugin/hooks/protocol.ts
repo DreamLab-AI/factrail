@@ -173,7 +173,7 @@ export function turnRequest(args: {
   return { protocol: PROTOCOL, ...args };
 }
 
-export function taintRequest(args: { config: PluginOptions; tool: string | null; skill: string | null; store: { taint: unknown }; now: number }): Body {
+export function taintRequest(args: { config: PluginOptions; tool: string | null; skill: string | null; input: Record<string, unknown> | null; store: { taint: unknown }; now: number }): Body {
   return { protocol: PROTOCOL, ...args };
 }
 
@@ -352,6 +352,17 @@ export function readTurn(body: Body): TurnOutcome {
 /** A `taint` response: the value to write, or undefined. */
 export function readTaint(body: Body): unknown {
   return writeOf(body['taint']);
+}
+
+/** A `taint` response's refusal: the text the model gets instead of a result, or null. */
+export function readDeny(body: Body): string | null {
+  return lineOf(body['deny']);
+}
+
+/** A tool call's arguments: the `tool.call` envelope without its reserved fields. */
+export function argumentsOf(event: Record<string, unknown>): Record<string, unknown> {
+  const { tool: _tool, tool_use_id: _id, agentId: _agent, ...args } = event;
+  return args;
 }
 
 /** A `status` response: the text to show and the switch to persist (boolean only). */

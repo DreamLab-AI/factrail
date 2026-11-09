@@ -386,7 +386,7 @@ describe('taint at the source', () => {
     const req = w.calls[0]?.stdin as Record<string, any>;
     expect(w.calls[0]?.argv).toEqual(['factrail', 'hook', 'taint']);
     expect(w.calls[0]?.timeoutMs).toBe(5_000);
-    expect(req).toEqual({ protocol: 1, config: req.config, tool: 'mcp__email-gateway__ask_email', skill: null, store: { taint: null }, now: NOW });
+    expect(req).toEqual({ protocol: 1, config: req.config, tool: 'mcp__email-gateway__ask_email', skill: null, input: { q: 'invoice' }, store: { taint: null }, now: NOW });
     expect(await w.store.get(`taint:${SID}`)).toEqual({ tainted: true, at: NOW });
   });
 
@@ -406,6 +406,21 @@ describe('taint at the source', () => {
     expect(req.tool).toBe(null);
     expect(req.skill).toBe('email-search');
     expect(await w.store.get(`taint:${SID}`)).toEqual({ tainted: true, at: NOW });
+  });
+
+  test('a refusal from the binary denies the call instead of running it', async ($, on) => {
+    const w = world(on);
+    w.reply['taint'] = ok({ taint: null, deny: 'factrail refused this call' });
+    const r = await $.tool.call({ tool: 'Bash', command: 'ls' } as never);
+    expect((r as { deny?: string }).deny).toBe('factrail refused this call');
+    expect((r as { result?: unknown }).result).toBe(undefined);
+  });
+
+  test('skill.prompt sends no input and is never refused', async ($, on) => {
+    const w = world(on);
+    w.reply['taint'] = ok({ taint: null, deny: null });
+    await $.skill.prompt({ skill: 'email-search', text: 'search mail' });
+    expect((w.calls[0]?.stdin as Record<string, any>).input).toBe(null);
   });
 
   test('a failing binary never blocks the tool call', async ($, on) => {

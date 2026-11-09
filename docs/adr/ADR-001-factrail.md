@@ -85,3 +85,26 @@ plugin-qualified call such as `agentbox:email-search` did not taint while its ex
 `implementation_status` stays `complete`, now true. Pinned by
 `a_qualified_skill_call_taints_exactly_like_its_expansion` (`crates/factrail-policy/tests/policy.rs`);
 PR #5 extends the same fence to `corpus::tainted` in `factrail-eval`.
+
+## Amendment — 2026-11-09: arguments are never rewritten
+
+Reduction rewrote the arguments of `drop_call` calls (cut to 200 chars) and of every
+reproducible read (160 chars) to an inline stub: the head, an ellipsis, a bracketed count
+of chars. In long sessions most long arguments in context took that shape, and the model
+reproduced it in new long arguments: Bash commands that failed with `unexpected EOF` or
+`command not found`, files written with the stub in them. A scan of one estate's Claude
+Code transcripts on 2026-11-09 found 443 broken calls in 72 sessions (agentbox ADR-2121,
+"Finding — 2026-11-09"). The tools do not truncate; the copy is in-context imitation.
+
+Decision: `apply` reduces results only. `Action::DropCall` is kept for recorded decisions
+and judge answers, and is applied exactly as `DropResult`. `brief_input`, `brief_map`,
+`INPUT_BRIEF_CHARS` and `RERUN_INPUT_CHARS` are removed. The `taint` hook, already called
+on every tool call, now also receives the call's arguments and refuses a call whose
+arguments carry the stub (`rails::argument_stub`), because pre-fix transcripts keep
+seeding the copy until their stubs leave the context. The refusal names the stub in words,
+never in its shape. The replay metric (`factrail-eval`) still models `DropCall` as removing
+the call; it is left unchanged so the promotion-gate baselines stay comparable.
+
+Pinned by `drop_call_keeps_the_arguments` (`crates/factrail-core/src/apply.rs`), the
+`argument_stub` doctest, `taint_event_and_status` (`crates/factrail/tests/hook.rs`) and the
+plugin's `taint at the source` tests.

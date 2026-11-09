@@ -10,6 +10,7 @@ use factrail_backend::{
     AnswerStore, DecisionLog, DecisionRecord, JudgeError, OutputStore, Paths, RecordedRequest,
     ask_all, health,
 };
+use factrail_core::rails::argument_stub;
 use factrail_core::{
     CompactOptions, Egress, Message, Outcome, Plan, Pressure, RAIL_FLOOR, Selection, pressure,
     transcript_tokens,
@@ -621,7 +622,15 @@ fn turn(request: &Value) -> Value {
         "baseline": baseline_out, "taint": taint_out, "nudge": nudge, "log": log })
 }
 
-/// `tool.call` / `skill.prompt`: does this one call taint the session?
+/// Why a call is refused when its arguments carry the old inline stub. It names the
+/// marker in words, never in its literal shape, so the refusal cannot seed the copy.
+const STUB_DENY: &str = "factrail refused this call: its arguments contain a compaction \
+stub (an ellipsis followed by a bracketed count of chars). Earlier tool calls in this \
+context were shortened that way by compaction; the stub is not content and nothing \
+expands it. Rewrite the call with the full text, or split a long write into smaller calls.";
+
+/// `tool.call` / `skill.prompt`: does this one call taint the session, and must it be
+/// refused because its arguments carry an inline compaction stub?
 fn taint(request: &Value) -> Value {
     let config = config_of(request);
     let now = num(request.get("now")).map_or_else(now_ms, |n| n as i64);
@@ -642,7 +651,11 @@ fn taint(request: &Value) -> Value {
         (None, None) => vec![],
     };
     let scan = scan_taint(&refs, &config);
-    json!({ "taint": taint_write(store(request, "taint"), &scan, now) })
+    let deny = request
+        .get("input")
+        .is_some_and(argument_stub)
+        .then_some(STUB_DENY);
+    json!({ "taint": taint_write(store(request, "taint"), &scan, now), "deny": deny })
 }
 
 /// `/factrail on|off|status`.

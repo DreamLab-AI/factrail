@@ -216,6 +216,20 @@ fn taint_event_and_status() {
     assert_eq!(t["taint"]["tainted"], true);
     let again = home.hook("taint", &json!({ "protocol": 1, "config": {}, "tool": "mcp__email-gateway__x", "skill": null, "store": { "taint": t["taint"] }, "now": 9 }));
     assert!(again["taint"].is_null(), "the first record is kept");
+    assert!(again["deny"].is_null(), "an ordinary call is never refused");
+    let stub = format!("python3 - <<EOF\nprint(1)\u{2026}[{} chars]", 812);
+    let refused = home.hook("taint", &json!({ "protocol": 1, "config": {}, "tool": "Bash", "skill": null,
+        "input": { "tool": "Bash", "tool_use_id": "toolu_9", "command": stub }, "store": {}, "now": 11 }));
+    let why = refused["deny"]
+        .as_str()
+        .expect("a stubbed argument is refused");
+    assert!(
+        why.contains("compaction stub") && !why.contains('\u{2026}'),
+        "{why}"
+    );
+    let plain = home.hook("taint", &json!({ "protocol": 1, "config": {}, "tool": "Bash", "skill": null,
+        "input": { "tool": "Bash", "tool_use_id": "toolu_10", "command": "ls -la" }, "store": {}, "now": 12 }));
+    assert!(plain["deny"].is_null());
     let s = home.hook("status", &json!({ "protocol": 1, "config": {}, "args": "off", "store": {}, "usage": { "tokens": 1000, "window": 200000 }, "tools": [] }));
     assert_eq!(s["store"]["enabled"], false);
     let text = s["text"].as_str().unwrap();
