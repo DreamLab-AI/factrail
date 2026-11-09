@@ -21,7 +21,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -29,10 +29,10 @@ repository = "https://github.com/DreamLab-AI/factrail"
 authors = ["DreamLab AI"]
 
 [workspace.dependencies]
-factrail-core = { version = "0.1.0", path = "crates/factrail-core" }
-factrail-policy = { version = "0.1.0", path = "crates/factrail-policy" }
-factrail-backend = { version = "0.1.0", path = "crates/factrail-backend" }
-factrail-eval = { version = "0.1.0", path = "crates/factrail-eval" }
+factrail-core = { version = "0.1.1", path = "crates/factrail-core" }
+factrail-policy = { version = "0.1.1", path = "crates/factrail-policy" }
+factrail-backend = { version = "0.1.1", path = "crates/factrail-backend" }
+factrail-eval = { version = "0.1.1", path = "crates/factrail-eval" }
 
 serde = { version = "1", features = ["derive"] }
 # preserve_order: tool inputs are measured and sent in the order the model wrote them.

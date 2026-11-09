@@ -358,7 +358,7 @@ fn status_fails_open_when_the_proxy_is_down_and_never_probes_the_default_cloud()
         "{text}"
     );
     assert!(
-        text.contains("factrail 0.1.0"),
+        text.contains(&format!("factrail {}", env!("CARGO_PKG_VERSION"))),
         "the rest of the status still prints: {text}"
     );
 
