@@ -531,7 +531,12 @@ mod read_observation_tests {
     /// because re-running the command would not give that output back.
     #[test]
     fn nonzero_exit_codes_of_any_width_are_observations() {
-        for code in ["exit code 1", "exit code 10", "exit code 127", "exit code 255"] {
+        for code in [
+            "exit code 1",
+            "exit code 10",
+            "exit code 127",
+            "exit code 255",
+        ] {
             let out = format!("listing files\n{code}\nfinished");
             assert!(READ_OBSERVATION.is_match(&out), "{code} is an observation");
         }
