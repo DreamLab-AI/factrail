@@ -23,7 +23,9 @@ use factrail_eval::sim::{SimOptions, simulate};
 use factrail_eval::synthetic;
 use factrail_policy::{Backend, Config};
 
-use crate::cli::{CompactArgs, DatasetArgs, EngineArgs, EvalArgs, JudgeArgs, JudgeKind, Source};
+use crate::cli::{
+    CompactArgs, DatasetArgs, EngineArgs, EvalArgs, JudgeArgs, JudgeKind, Source, StubsArgs,
+};
 use crate::judges;
 
 fn compact_options(engine: &EngineArgs) -> CompactOptions {
@@ -395,6 +397,61 @@ pub fn dataset(args: &DatasetArgs) -> Result<(), String> {
 }
 
 /// `factrail outputs expire`.
+/// `factrail stubs`: scan every `<project>/<session>.jsonl`. `Ok(false)` when
+/// `--check` is set and a stubbed call broke.
+pub fn stubs(args: &StubsArgs) -> Result<bool, String> {
+    let root = args
+        .claude_projects
+        .clone()
+        .unwrap_or_else(default_projects);
+    let mut sessions = Vec::new();
+    let projects = fs::read_dir(&root).map_err(|e| format!("{}: {e}", root.display()))?;
+    for project in projects.flatten() {
+        let Ok(files) = fs::read_dir(project.path()) else {
+            continue;
+        };
+        for file in files.flatten() {
+            let path = file.path();
+            if path.extension().is_none_or(|e| e != "jsonl") {
+                continue;
+            }
+            let Ok(text) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let scan = factrail_eval::stubs::scan_jsonl(&text, args.since.as_deref());
+            if scan.stubbed > 0 {
+                sessions.push((scan, project.file_name(), path));
+            }
+        }
+    }
+    sessions.sort_by_key(|s| std::cmp::Reverse((s.0.broken, s.0.stubbed)));
+    let stubbed: usize = sessions.iter().map(|s| s.0.stubbed).sum();
+    let broken: usize = sessions.iter().map(|s| s.0.broken).sum();
+    let since = args
+        .since
+        .as_deref()
+        .map(|s| format!(" since {s}"))
+        .unwrap_or_default();
+    println!(
+        "factrail stubs{since}: {} session(s), {stubbed} stubbed call(s), {broken} broken",
+        sessions.len()
+    );
+    for (scan, project, path) in sessions.iter().take(args.top) {
+        let session = path
+            .file_stem()
+            .map(|s| s.to_string_lossy())
+            .unwrap_or_default();
+        println!(
+            "  {:>4} broken / {:>4} stubbed  {} {}",
+            scan.broken,
+            scan.stubbed,
+            project.to_string_lossy(),
+            session
+        );
+    }
+    Ok(!(args.check && broken > 0))
+}
+
 pub fn expire(days: u64) -> Result<(), String> {
     let paths = Paths::from_env().ok_or("no home directory")?;
     let removed = OutputStore::new(&paths)

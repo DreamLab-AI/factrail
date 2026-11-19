@@ -16,6 +16,8 @@
 //!   naming each by a hash.
 //! * [`dataset`] exports Tev1-format records (hindsight or teacher labels) for
 //!   training a local judge.
+//! * [`stubs`] counts calls whose arguments carry the stub factrail up to 0.1.0
+//!   wrote, and which of them broke.
 //!
 //! ```
 //! use factrail_eval::{metric::{evaluate, Decider, EvalOptions}, synthetic::corpus};
@@ -32,4 +34,5 @@ pub mod facts;
 pub mod gate;
 pub mod metric;
 pub mod sim;
+pub mod stubs;
 pub mod synthetic;

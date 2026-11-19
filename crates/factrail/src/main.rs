@@ -38,6 +38,11 @@ fn main() -> ExitCode {
             Err(e) => Err(e),
         },
         Command::Dataset(args) => offline::dataset(&args),
+        Command::Stubs(args) => match offline::stubs(&args) {
+            Ok(true) => Ok(()),
+            Ok(false) => return ExitCode::FAILURE,
+            Err(e) => Err(e),
+        },
         Command::Outputs {
             action: OutputsAction::Expire { days },
         } => offline::expire(days),

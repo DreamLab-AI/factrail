@@ -8,9 +8,8 @@ use regex::{Regex, RegexBuilder};
 use crate::calls::ToolCall;
 use crate::model::{Message, transcript_chars};
 use crate::rails::{
-    INPUT_BRIEF_CHARS, LAST_RESORT_TIER, Layout, RAIL_TIERS, RERUN_INPUT_CHARS, brief_map,
-    fact_lines, full_output_note, is_compacted, read_is_observation, render_stub, reproducible,
-    rerun_note, stub_layout,
+    LAST_RESORT_TIER, Layout, RAIL_TIERS, fact_lines, full_output_note, is_compacted,
+    read_is_observation, render_stub, reproducible, rerun_note, stub_layout,
 };
 use crate::text::{clen, cslice};
 use crate::value::{
@@ -25,7 +24,11 @@ pub enum Action {
     Keep,
     /// The call stays; its result is reduced by the rails.
     DropResult,
-    /// The call's arguments are cut short; its result is reduced by the rails.
+    /// The judge would drop the call as well: its result is reduced by the rails,
+    /// exactly as for [`Action::DropResult`]. The call's arguments stay verbatim
+    /// (arguments cut to an inline stub were copied by the model into new calls),
+    /// so the variant survives only to keep recorded decisions and judge answers
+    /// readable.
     DropCall,
 }
 
@@ -186,12 +189,11 @@ impl<'a> Reducer<'a> {
     }
 }
 
-/// Rebuilds `messages` with each reduced call's arguments cut and its result
-/// replaced by `reduced[id]`.
+/// Rebuilds `messages` with each reduced call's result replaced by `reduced[id]`.
+/// Call arguments are never rewritten.
 fn rebuild(
     messages: &[Message],
     actions: &HashMap<&str, Action>,
-    rerunnable: &HashSet<&str>,
     reduced: &HashMap<&str, String>,
 ) -> Applied {
     let mut out = Vec::with_capacity(messages.len());
@@ -205,21 +207,6 @@ fn rebuild(
             };
             if action == Action::Keep {
                 continue;
-            }
-            let rerun = rerunnable.contains(tool.tool_use_id.as_str());
-            if action == Action::DropCall || rerun {
-                let brief = brief_map(
-                    &tool.input,
-                    if rerun {
-                        RERUN_INPUT_CHARS
-                    } else {
-                        INPUT_BRIEF_CHARS
-                    },
-                );
-                if brief != tool.input {
-                    tool.input = brief;
-                    changed = true;
-                }
             }
             if let (Some(mirror), Some(new)) = (&tool.text, reduced.get(tool.tool_use_id.as_str()))
             {
@@ -253,7 +240,7 @@ fn rebuild(
 /// value selection on, the stubs' fact lines then share one pooled budget. When
 /// even the strictest tier misses `reduction.hard`, the oldest reduced results
 /// give way: first only their fact lines stay, then they become one-line notes.
-/// Pinned calls and kept calls are never touched.
+/// Pinned calls and kept calls are never touched, and no call's arguments are.
 pub fn apply(
     messages: &[Message],
     calls: &[ToolCall],
@@ -289,7 +276,7 @@ pub fn apply(
     };
     let mut reducer = Reducer {
         texts,
-        rerunnable: rerunnable.clone(),
+        rerunnable,
         head_chars,
         selection,
         ctxs,
@@ -305,7 +292,7 @@ pub fn apply(
         .iter()
         .map(|&id| (id, reducer.reduce(id, 0).to_owned()))
         .collect();
-    let first = rebuild(messages, actions, &rerunnable, &loosest);
+    let first = rebuild(messages, actions, &loosest);
     let mut after = transcript_chars(&first.messages);
     let need = before as f64 * (1.0 - reduction.target);
     let mut top = 0;
@@ -340,7 +327,6 @@ pub fn apply(
             &level,
             messages,
             actions,
-            &rerunnable,
             selection.contain,
         );
     }
@@ -351,7 +337,7 @@ pub fn apply(
             (id, reducer.reduce_uncached(id, tier).0)
         })
         .collect();
-    let mut applied = rebuild(messages, actions, &rerunnable, &finals);
+    let mut applied = rebuild(messages, actions, &finals);
     applied.tier = top;
     let hard_need = before as f64 * (1.0 - reduction.hard);
     if before > 0 && reduction.hard > 0.0 && transcript_chars(&applied.messages) as f64 > hard_need
@@ -380,7 +366,6 @@ fn pool<'a>(
     level: &HashMap<&str, usize>,
     messages: &[Message],
     actions: &HashMap<&str, Action>,
-    rerunnable: &HashSet<&str>,
     contain: bool,
 ) {
     let mut keys: HashMap<&str, PickKey> = HashMap::new();
@@ -392,7 +377,7 @@ fn pool<'a>(
         }
         base.insert(id, text);
     }
-    let applied = rebuild(messages, actions, rerunnable, &base);
+    let applied = rebuild(messages, actions, &base);
     let mut side = Vec::new();
     let mut members: Vec<&'a str> = Vec::new();
     for m in &applied.messages {
@@ -708,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    fn drop_call_briefs_the_arguments() {
+    fn drop_call_keeps_the_arguments() {
         let long = format!("curl {}", "q".repeat(500));
         let ms = session(&[("c1", long.as_str(), noisy("error 1", 600))]);
         let (calls, actions) = all(&ms, Action::DropCall);
@@ -726,7 +711,12 @@ mod tests {
         let cmd = out.messages[1].tool_uses[0].input["command"]
             .as_str()
             .unwrap();
-        assert!(cmd.ends_with("…[305 chars]"), "{cmd}");
+        assert_eq!(cmd, long, "arguments are never rewritten");
+        assert!(
+            out.messages[2].tool_results[0]
+                .text
+                .contains("[factrail omitted")
+        );
     }
 
     #[test]

@@ -27,7 +27,9 @@ import {
   compactTimeoutMs,
   contextUsage,
   expiredSessionKeys,
+  argumentsOf,
   readCompact,
+  readDeny,
   readStatus,
   readTaint,
   readTurn,
@@ -84,16 +86,18 @@ async function compactNow($: Engine, state: State, why: string): Promise<void> {
 }
 
 /** `factrail hook taint` for one tool call or skill expansion; never throws. */
-async function markTaint($: Engine, options: PluginOptions, binary: string, tool: string | null, skill: string | null): Promise<void> {
+/** Marks the session tainted when the binary says so; returns the binary's refusal of the call, if any. */
+async function markTaint($: Engine, options: PluginOptions, binary: string, tool: string | null, skill: string | null, input: Record<string, unknown> | null): Promise<string | null> {
   try {
     const sessionId = await $.session.id();
-    if (!sessionId) return;
-    const request = taintRequest({ config: options, tool, skill, store: { taint: stored(await $.store.get(taintKey(sessionId))) }, now: await $.clock.now() });
+    if (!sessionId) return null;
+    const request = taintRequest({ config: options, tool, skill, input, store: { taint: stored(await $.store.get(taintKey(sessionId))) }, now: await $.clock.now() });
     const r = await runHook($, binary, 'taint', request, TIMEOUT_MS.taint);
-    if (!r.ok) { $.ui.log(`factrail: taint check failed (${r.why})`); return; }
+    if (!r.ok) { $.ui.log(`factrail: taint check failed (${r.why})`); return null; }
     const value = readTaint(r.body);
     if (value !== undefined) await $.store.set(taintKey(sessionId), value);
-  } catch { /* marking must never block a tool call; the turn and compact hooks see the transcript too */ }
+    return readDeny(r.body);
+  } catch { return null; /* marking must never block a tool call; the turn and compact hooks see the transcript too */ }
 }
 
 export const register: Register = (on: On, options: PluginOptions) => {
@@ -126,15 +130,17 @@ export const register: Register = (on: On, options: PluginOptions) => {
     return next(event);
   });
 
-  // Taint at the source, before any content reaches the transcript.
+  // Taint at the source, before any content reaches the transcript. The same call
+  // refuses arguments carrying a compaction stub the model copied from rewritten history.
   on('tool.call', async ($, event, next) => {
     const input = event as unknown as Record<string, unknown>;
-    await markTaint($, options, binary, String(event.tool), skillOf(String(event.tool), input));
+    const deny = await markTaint($, options, binary, String(event.tool), skillOf(String(event.tool), input), argumentsOf(input));
+    if (deny) return { deny };
     return next(event);
   });
 
   on('skill.prompt', async ($, event, next) => {
-    await markTaint($, options, binary, null, event.skill);
+    await markTaint($, options, binary, null, event.skill, null);
     return next(event);
   });
 

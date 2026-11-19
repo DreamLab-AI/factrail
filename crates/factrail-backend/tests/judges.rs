@@ -43,6 +43,20 @@ struct Server {
 }
 
 async fn serve(respond: impl Fn(&Seen) -> Reply + Send + Sync + 'static) -> Server {
+    serve_with_headers(move |seen| {
+        let (code, body, delay) = respond(seen);
+        (code, body, delay, Vec::new())
+    })
+    .await
+}
+
+/// Like [`serve`], and the reply also carries extra response headers.
+async fn serve_with_headers(
+    respond: impl Fn(&Seen) -> (u16, String, Duration, Vec<(&'static str, &'static str)>)
+    + Send
+    + Sync
+    + 'static,
+) -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let seen = Arc::new(Mutex::new(Vec::new()));
@@ -93,11 +107,15 @@ async fn serve(respond: impl Fn(&Seen) -> Reply + Send + Sync + 'static) -> Serv
                 seen.lock().unwrap().push(request.clone());
                 let now = live.fetch_add(1, Ordering::SeqCst) + 1;
                 peak.fetch_max(now, Ordering::SeqCst);
-                let (code, body, delay) = respond(&request);
+                let (code, body, delay, headers) = respond(&request);
                 tokio::time::sleep(delay).await;
                 live.fetch_sub(1, Ordering::SeqCst);
+                let extra: String = headers
+                    .iter()
+                    .map(|(k, v)| format!("{k}: {v}\r\n"))
+                    .collect();
                 let response = format!(
-                    "HTTP/1.1 {code} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    "HTTP/1.1 {code} X\r\ncontent-type: application/json\r\n{extra}content-length: {}\r\nconnection: close\r\n\r\n{body}",
                     body.len()
                 );
                 let _ = socket.write_all(response.as_bytes()).await;
@@ -615,4 +633,170 @@ fn info_names_the_judge() {
     assert_eq!(t.info().kind, "tev");
     assert_eq!(t.info().endpoint, "http://h:8000/v1/chat/completions");
     assert_eq!(t.info().model, "tev1");
+}
+
+const PROXY_HEADERS: [(&str, &str); 2] = [
+    ("x-system-one-backend", "typesafe"),
+    ("x-system-one-model", "jev-latest"),
+];
+
+fn answers_body(model: Option<&str>) -> String {
+    let mut body =
+        json!({ "answers": { "call_t1": { "noul": 0.9 }, "result_t1": { "noul": 0.25 } } });
+    if let Some(m) = model {
+        body["model"] = json!(m);
+    }
+    body.to_string()
+}
+
+#[tokio::test]
+async fn system_one_reports_the_backend_from_the_response_header() {
+    let server = serve_with_headers(|_| {
+        (
+            200,
+            answers_body(Some("jev-1.14.0")),
+            Duration::ZERO,
+            PROXY_HEADERS.to_vec(),
+        )
+    })
+    .await;
+    let answered = system_one(&server.url, None)
+        .ask(&request(&["t1"], "g"))
+        .await
+        .unwrap();
+    assert_eq!(answered.backend.as_deref(), Some("typesafe"));
+    assert_eq!(
+        answered.model.as_deref(),
+        Some("jev-1.14.0"),
+        "the body's model is the one that answered; the header only an alias"
+    );
+}
+
+#[tokio::test]
+async fn system_one_falls_back_to_the_model_header_then_to_nothing() {
+    let with = serve_with_headers(|_| {
+        (
+            200,
+            answers_body(None),
+            Duration::ZERO,
+            PROXY_HEADERS.to_vec(),
+        )
+    })
+    .await;
+    let answered = system_one(&with.url, None)
+        .ask(&request(&["t1"], "g"))
+        .await
+        .unwrap();
+    assert_eq!(answered.model.as_deref(), Some("jev-latest"));
+    assert_eq!(answered.backend.as_deref(), Some("typesafe"));
+
+    let bare = serve(|_| (200, answers_body(None), Duration::ZERO)).await;
+    let answered = system_one(&bare.url, None)
+        .ask(&request(&["t1"], "g"))
+        .await
+        .unwrap();
+    assert_eq!(answered.model, None);
+    assert_eq!(answered.backend, None, "a plain endpoint names no backend");
+}
+
+#[test]
+fn judge_info_records_what_answered_and_falls_back_to_what_was_asked() {
+    use factrail_backend::{Answered, JudgeInfo};
+    let asked = JudgeInfo {
+        kind: "systemone".into(),
+        endpoint: "http://127.0.0.1:8094/v1/systemone".into(),
+        model: "subq-snap-preview".into(),
+        backend: None,
+    };
+    let silent = Answered::default();
+    let live = Answered {
+        model: Some("jev-1.14.0".into()),
+        backend: Some("typesafe".into()),
+        ..Answered::default()
+    };
+    let seen = asked.observed(&[silent.clone(), live]);
+    assert_eq!(seen.model, "jev-1.14.0");
+    assert_eq!(seen.backend.as_deref(), Some("typesafe"));
+    assert_eq!(seen.endpoint, asked.endpoint);
+    assert_eq!(
+        asked.observed(&[silent]),
+        asked,
+        "nothing reported, nothing changed"
+    );
+    assert_eq!(asked.observed(&[]), asked);
+}
+
+#[test]
+fn old_decision_records_without_a_backend_still_read() {
+    use factrail_backend::JudgeInfo;
+    let old: JudgeInfo =
+        serde_json::from_str(r#"{"kind":"tev","endpoint":"http://x","model":"tev1"}"#).unwrap();
+    assert_eq!(old.backend, None);
+    assert!(!serde_json::to_string(&old).unwrap().contains("backend"));
+}
+
+#[tokio::test]
+async fn health_reads_the_proxy_and_fails_open() {
+    use factrail_backend::health;
+    let server = serve(|seen| {
+        assert!(
+            seen.head.starts_with("GET /health HTTP/1.1"),
+            "{}",
+            seen.head
+        );
+        ok(json!({ "ok": true, "backend": "typesafe", "local": false }))
+    })
+    .await;
+    let got = health(
+        &format!("{}/v1/systemone", server.url),
+        Duration::from_secs(2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(got.backend, "typesafe");
+    assert_eq!(got.local, Some(false));
+
+    let dead = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/v1/systemone", dead.local_addr().unwrap());
+    drop(dead);
+    let err = health(&url, Duration::from_secs(2)).await.unwrap_err();
+    assert!(!err.is_empty());
+
+    let odd = serve(|_| ok(json!({ "ok": true }))).await;
+    assert!(
+        health(&odd.url, Duration::from_secs(2)).await.is_err(),
+        "no backend named"
+    );
+    assert!(health("not a url", Duration::from_secs(1)).await.is_err());
+}
+
+#[test]
+fn latest_record_is_the_last_line_of_the_newest_day_file() {
+    use factrail_backend::{DecisionLog, DecisionRecord, JudgeInfo, Paths};
+    let root = std::env::temp_dir().join(format!("factrail-latest-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let log = DecisionLog::new(&Paths::under(&root));
+    assert!(log.latest().is_none(), "a missing folder has no latest");
+    let record = |ts_ms: u64, model: &str| DecisionRecord {
+        ts_ms,
+        session: "s".into(),
+        judge: JudgeInfo {
+            kind: "systemone".into(),
+            endpoint: "http://x".into(),
+            model: model.into(),
+            backend: Some("typesafe".into()),
+        },
+        egress: "full".into(),
+        goal: None,
+        requests: vec![],
+        decisions: vec![],
+        stats: Default::default(),
+        outcome: "ok".into(),
+    };
+    let day = |n: u64| std::time::UNIX_EPOCH + Duration::from_secs(n * 86_400);
+    log.append(&record(1, "old"), day(1)).unwrap();
+    log.append(&record(2, "first-today"), day(2)).unwrap();
+    log.append(&record(3, "last-today"), day(2)).unwrap();
+    assert_eq!(log.latest().unwrap().judge.model, "last-today");
+    let _ = std::fs::remove_dir_all(&root);
 }
