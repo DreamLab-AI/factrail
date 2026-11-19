@@ -138,6 +138,26 @@ impl DecisionLog {
         Self::read_all(&self.dir)
     }
 
+    /// The most recent record: the last readable line of the newest day file
+    /// (older files are not read). `None` when the log is empty or missing.
+    pub fn latest(&self) -> Option<DecisionRecord> {
+        let mut files: Vec<PathBuf> = fs::read_dir(&self.dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "jsonl") && p.is_file())
+            .collect();
+        files.sort();
+        files.iter().rev().find_map(|p| {
+            let lines = BufReader::new(fs::File::open(p).ok()?).lines();
+            lines
+                .map_while(Result::ok)
+                .filter_map(|line| serde_json::from_str(&line).ok())
+                .last()
+        })
+    }
+
     /// Every record in the `*.jsonl` files of `dir`, files in name (date)
     /// order, lines in file order. Unreadable files and lines that are not a
     /// record are skipped; a missing folder yields nothing.
@@ -237,6 +257,7 @@ mod tests {
                 kind: "tev".into(),
                 endpoint: "http://x/v1/chat/completions".into(),
                 model: "tev1".into(),
+                backend: None,
             },
             egress: "full".into(),
             goal: None,

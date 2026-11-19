@@ -13,7 +13,9 @@ verbatim? Only what the judge lets go is reduced, and reduced through **fact rai
   lines (errors, status codes, paths, versions, ids, counts, receipts) and its tail. The
   fact lines are chosen by learned token value, from one budget pooled across the whole
   compaction;
-- nothing is erased, and every reduced output is saved, secrets masked, one read away.
+- nothing is erased, and every reduced output is saved, secrets masked, one read away;
+- a call's **arguments are never rewritten**. Only results are reduced: arguments cut to an
+  inline stub taught the model to write the stub into new commands and files.
 
 ## Measured
 
@@ -58,10 +60,27 @@ cargo build --release
 ./target/release/factrail compact session.jsonl --out compacted.json
 # training records for a local judge, labelled by hindsight
 ./target/release/factrail dataset --claude-projects ~/.claude/projects --out data/tev-$(date +%F)
+# calls carrying the inline argument stub 0.1.0 wrote, and how many broke; --check fails on any
+./target/release/factrail stubs --since 2026-11-09T15:00 --check
 ```
 
 Judges and running one locally: [docs/local-judge.md](docs/local-judge.md). The decision
 record: [docs/adr/ADR-001-factrail.md](docs/adr/ADR-001-factrail.md).
+
+## Which judge answered
+
+`/factrail status` prints the real endpoint (the configured `baseUrl`, or the vendor default
+marked `(default)`), and, for a `baseUrl` you set, a `live backend:` line read from the
+proxy's `GET /health`, so it follows an operator's live backend switch. `/health` names no
+model, so the same line adds the model the latest decision record saw answer
+(`last judged by jev-1.14.0 on typesafe 7m ago`). An unreachable proxy prints
+`live backend: unknown (proxy unreachable: …)` and nothing else changes; the vendor cloud
+is never probed.
+
+Each decision-log record's `judge` carries the model the response reported (falling back to
+the configured `model` when it reports none) and, from the System One proxy's
+`x-system-one-backend` response header, the `backend` that answered. Both are read from the
+judge response itself, so they cost no extra request and stay right after a switch.
 
 ## The boundary
 

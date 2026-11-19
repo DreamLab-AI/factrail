@@ -97,8 +97,12 @@ pub struct Answered {
     pub redacted: usize,
     /// The endpoint's `usage` object, when it reported one (summed over calls for Tev).
     pub usage: Option<Value>,
-    /// The model the endpoint says answered, when it said.
+    /// The model the endpoint says answered, when it said: the response body's
+    /// `model`, else the `x-system-one-model` header.
     pub model: Option<String>,
+    /// The backend that answered, when the endpoint said (the System One
+    /// proxy's `x-system-one-backend` header). It follows a live backend switch.
+    pub backend: Option<String>,
 }
 
 /// Which judge answered: recorded with every decision.
@@ -108,8 +112,43 @@ pub struct JudgeInfo {
     pub kind: String,
     /// The URL requests are posted to.
     pub endpoint: String,
-    /// The model asked for.
+    /// The model: the one asked for, or, after [`JudgeInfo::observed`], the one
+    /// the response said answered.
     pub model: String,
+    /// The vendor backend that answered (`typesafe`, `subq`, …), when the
+    /// endpoint said. Absent in records written before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+}
+
+impl JudgeInfo {
+    /// This judge as it was actually observed: the model and backend the
+    /// responses reported (the first that reported one), falling back to what
+    /// was asked for. The endpoint and kind never change.
+    ///
+    /// ```
+    /// use factrail_backend::{Answered, JudgeInfo};
+    ///
+    /// let asked = JudgeInfo {
+    ///     kind: "systemone".into(),
+    ///     endpoint: "http://127.0.0.1:8094/v1/systemone".into(),
+    ///     model: "configured".into(),
+    ///     backend: None,
+    /// };
+    /// let answered = Answered { model: Some("jev-1.14.0".into()), backend: Some("typesafe".into()), ..Answered::default() };
+    /// let seen = asked.observed(&[answered]);
+    /// assert_eq!(seen.model, "jev-1.14.0");
+    /// assert_eq!(seen.backend.as_deref(), Some("typesafe"));
+    /// ```
+    pub fn observed(&self, answered: &[Answered]) -> JudgeInfo {
+        let first =
+            |pick: fn(&Answered) -> Option<&String>| answered.iter().find_map(pick).cloned();
+        JudgeInfo {
+            model: first(|a| a.model.as_ref()).unwrap_or_else(|| self.model.clone()),
+            backend: first(|a| a.backend.as_ref()).or_else(|| self.backend.clone()),
+            ..self.clone()
+        }
+    }
 }
 
 /// Exactly what a judge sends for one request: the state and questions after
@@ -228,6 +267,7 @@ impl SystemOneJudge {
             kind: "systemone".into(),
             endpoint: self.base_url.clone(),
             model: self.model.clone(),
+            backend: None,
         }
     }
 
@@ -248,7 +288,11 @@ impl SystemOneJudge {
         if let Some(key) = &self.api_key {
             post = post.bearer_auth(key);
         }
-        let value = send(post, self.api_key.as_deref()).await?;
+        let Sent {
+            value,
+            backend,
+            model: header_model,
+        } = send(post, self.api_key.as_deref()).await?;
         let answers = system_one_answers(&value, request)?;
         Ok(Answered {
             answers,
@@ -257,7 +301,9 @@ impl SystemOneJudge {
             model: value
                 .get("model")
                 .and_then(Value::as_str)
-                .map(str::to_owned),
+                .map(str::to_owned)
+                .or(header_model),
+            backend,
         })
     }
 }
@@ -352,6 +398,7 @@ impl TevJudge {
     pub fn info(&self) -> JudgeInfo {
         JudgeInfo {
             kind: "tev".into(),
+            backend: None,
             endpoint: self.url.clone(),
             model: self.model.clone(),
         }
@@ -402,6 +449,7 @@ impl TevJudge {
             redacted: out.redacted,
             usage: (!usage.is_empty()).then_some(Value::Object(usage)),
             model,
+            backend: None,
         })
     }
 
@@ -420,7 +468,9 @@ impl TevJudge {
         if let Some(key) = &self.api_key {
             post = post.bearer_auth(key);
         }
-        send(post, self.api_key.as_deref()).await
+        send(post, self.api_key.as_deref())
+            .await
+            .map(|sent| sent.value)
     }
 }
 
@@ -513,10 +563,30 @@ fn client(timeout: Duration) -> reqwest::Client {
         .expect("the TLS backend initialises")
 }
 
+/// A successful response: its JSON body and what the System One proxy says
+/// about who answered, in headers (so no second round trip is needed).
+struct Sent {
+    value: Value,
+    backend: Option<String>,
+    model: Option<String>,
+}
+
+/// A non-empty response header as text.
+fn header_text(response: &reqwest::Response, name: &str) -> Option<String> {
+    response
+        .headers()
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
+}
+
 /// Sends `post` and returns its JSON body, mapping every failure to a [`JudgeError`].
-async fn send(post: reqwest::RequestBuilder, api_key: Option<&str>) -> Result<Value, JudgeError> {
+async fn send(post: reqwest::RequestBuilder, api_key: Option<&str>) -> Result<Sent, JudgeError> {
     let response = post.send().await.map_err(transport)?;
     let code = response.status().as_u16();
+    let backend = header_text(&response, "x-system-one-backend");
+    let model = header_text(&response, "x-system-one-model");
     let text = response.text().await.map_err(transport)?;
     if !(200..300).contains(&code) {
         let known: Vec<&str> = api_key.into_iter().collect();
@@ -527,8 +597,13 @@ async fn send(post: reqwest::RequestBuilder, api_key: Option<&str>) -> Result<Va
         let head: String = clean.chars().take(STATUS_BODY_CHARS).collect();
         return Err(JudgeError::Status { code, body: head });
     }
-    serde_json::from_str(&text)
-        .map_err(|e| JudgeError::Malformed(format!("response is not JSON ({e})")))
+    let value = serde_json::from_str(&text)
+        .map_err(|e| JudgeError::Malformed(format!("response is not JSON ({e})")))?;
+    Ok(Sent {
+        value,
+        backend,
+        model,
+    })
 }
 
 /// A reqwest error with its source chain (reqwest's own message is terse).
