@@ -623,7 +623,13 @@ mod tests {
             is_error: false,
             pinned: false,
         };
-        assert_eq!(compact_call(&call, Egress::Metadata), "t9 Bash keys=a,z → ok 5ch");
-        assert_eq!(compact_call(&call, Egress::Full), "t9 Bash z=1 a=2 → ok 5ch");
+        assert_eq!(
+            compact_call(&call, Egress::Metadata),
+            "t9 Bash keys=a,z → ok 5ch"
+        );
+        assert_eq!(
+            compact_call(&call, Egress::Full),
+            "t9 Bash z=1 a=2 → ok 5ch"
+        );
     }
 }
