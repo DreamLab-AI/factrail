@@ -17,9 +17,9 @@ use factrail_core::{
 };
 use factrail_policy::{
     Backend, CacheWarm, Config, Fallback, Judge, Scope, SwitchCommand, ToolRef, TriggerReason,
-    cache_ttl_seconds, compact_scope, decide, merge_taint, nudge_delay_ms, rearm_gap,
-    resolve_enabled, scan_taint, should_arm_nudge, should_compact, taint_write, trigger_tokens,
-    turn_may_trigger,
+    cache_ttl_seconds, ceiling_tokens, compact_scope, decide, fits_under_ceiling, merge_taint,
+    nudge_delay_ms, rearm_gap, rearm_point, resolve_enabled, scan_taint, should_arm_nudge,
+    should_compact, taint_write, trigger_tokens, turn_may_trigger,
 };
 
 use crate::judges;
@@ -236,7 +236,8 @@ fn compact(request: &Value) -> Result<Value, String> {
                         save_for_summary(&OutputStore::new(p), &session_id, &messages)
                     })
                 })
-                .flatten();
+                .flatten()
+                .map(|note| after_user_instructions(request, note));
             Resolution {
                 action: "builtin",
                 reason: v.reason.as_str().to_owned(),
@@ -475,6 +476,14 @@ fn run_compaction(
         }
     }
     let reduction = outcome.stats.reduction();
+    // Whatever hands over to the built-in summary from here saves the full outputs
+    // first, as the judge-less path does, so exact outputs stay one read away.
+    let summary_instructions = || {
+        paths
+            .filter(|_| config.save_full_outputs)
+            .and_then(|p| save_for_summary(&OutputStore::new(p), session_id, messages))
+            .map(|note| after_user_instructions(request, note))
+    };
     if reduction <= 0.0 || (reduction < gate && config.fallback == Fallback::Summary) {
         let why = if reduction <= 0.0 {
             "nothing to reduce"
@@ -490,8 +499,32 @@ fn run_compaction(
                 summary_line(&outcome),
                 pct(gate)
             ),
-            instructions: None,
+            instructions: summary_instructions(),
         });
+    }
+    // The headroom rule, whatever the fallback mode: a reduce-only result is
+    // installed only if the next compaction could still start under the ceiling.
+    // Installing one that cannot leaves the session to the engine's own
+    // auto-compaction, which comes back here for the same near-empty answer.
+    if let (Some(tokens), Some(ceiling)) = (
+        tokens.filter(|t| t.is_finite() && *t > 0.0),
+        ceiling_tokens(window),
+    ) {
+        let transcript = (transcript_tokens(messages) as f64).min(tokens);
+        let projected = tokens - transcript * reduction;
+        let gap = rearm_gap(trigger_tokens(window, config), config.rearm_tokens);
+        if !fits_under_ceiling(projected, gap, Some(ceiling)) {
+            return Ok(Resolution {
+                action: "builtin",
+                reason: "no-headroom".into(),
+                outcome: None,
+                log: format!(
+                    "factrail: built-in summary (no headroom: {} would leave about {projected:.0} tokens, and the next compaction needs to start under {ceiling:.0})",
+                    summary_line(&outcome)
+                ),
+                instructions: summary_instructions(),
+            });
+        }
     }
     if let Some(p) = paths {
         if !outcome.new_answers.is_empty() {
@@ -526,6 +559,20 @@ fn run_compaction(
         log,
         instructions: None,
     })
+}
+
+/// The summary instructions the plugin passes on replace the event's own, so what
+/// the user typed after `/compact` goes first and the saved-outputs note follows.
+fn after_user_instructions(request: &Value, note: String) -> String {
+    match request
+        .get("instructions")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(user) => format!("{user}\n\n{note}"),
+        None => note,
+    }
 }
 
 /// Before the built-in summary: every tool output of 200 chars or more is saved,
@@ -600,7 +647,9 @@ fn turn(request: &Value) -> Value {
     let mut nudge = Value::Null;
     if !verdict.run && config.cache_warm != CacheWarm::Off {
         let gap = rearm_gap(trigger_tokens(window, &config), config.rearm_tokens);
-        if should_arm_nudge(tokens, config.cache_warm_floor_tokens, baseline, gap) {
+        // The nudge re-arms at the same capped point as the trigger.
+        let capped = baseline.map(|b| rearm_point(b, gap, ceiling_tokens(window)) - gap);
+        if should_arm_nudge(tokens, config.cache_warm_floor_tokens, capped, gap) {
             let rate_limits = request
                 .get("rateLimits")
                 .and_then(Value::as_u64)

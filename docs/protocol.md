@@ -67,7 +67,17 @@ Response:
 `store` lists the plugin-store writes the plugin must make: `taint` (written to
 `taint:<session id>` when not null) and `last` (the last outcome line). `reason`
 is the log vocabulary: `ok`, `ok-local`, `ok-rules`, `switched-off`, `tainted`,
-`no-key`, `below-gate`, `deadline`, `error`, `precompute`, `subagent`.
+`no-key`, `below-gate`, `no-headroom`, `deadline`, `error`, `precompute`, `subagent`.
+
+**The headroom rule.** A result is installed only if the size it would leave, plus the
+re-arm gap, fits under the ceiling (85% of `usage.window`). Otherwise the answer is
+`builtin` with reason `no-headroom`, whatever `fallback` says: a reduce-only result
+installed above that line leaves no room for a later compaction, and the engine's own
+auto-compaction would come back for the same answer. With no `usage.window` there is no
+ceiling. A `builtin` answer from `below-gate` or `no-headroom` carries `instructions`
+naming where the full tool outputs were saved, when `saveFullOutputs` is on. Returned
+`instructions` begin with the request's own `instructions` (what the user typed after
+`/compact`), because the plugin passes them on in place of the event's.
 
 ## `factrail hook turn` — `turn.complete`
 
@@ -80,6 +90,11 @@ Response: `compact` (bool), `reason`, `threshold`, `need`, `baseline` (a value t
 write to `baseline:<session id>`, or null), `taint` (a value to write to
 `taint:<session id>`, or null), `nudge` (`{ "delayMs": n, "mode": "compact" | "notify",
 "tokens": n }` or null), `log` (a line, or null).
+
+`need` is the trigger, or the baseline plus the re-arm gap when that is larger, capped at
+the ceiling (85% of `usage.window`) but never below the trigger. At or above the ceiling
+a session therefore always compacts, unless the trigger itself sits above the ceiling,
+and the headroom rule decides what that compaction may be.
 
 `tools` is the session's tool calls reduced to what the taint rule reads:
 `[{ "tool": "mcp__x__y", "skill": null }]`, `skill` being `input.skill ?? input.name`

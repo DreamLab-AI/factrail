@@ -62,6 +62,59 @@ pub fn rearm_gap(threshold: Option<f64>, rearm_tokens: f64) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// The share of the window, in percent, that a session is never left above.
+/// Claude Code compacts on its own close to the window; a session that
+/// factrail's installs let grow that far has no room for another reduce-only
+/// round, so the ceiling is where the built-in summary takes over.
+pub const CEILING_PERCENT: f64 = 85.0;
+
+/// The ceiling in tokens: [`CEILING_PERCENT`] of the window, `None` when the
+/// window is unknown.
+///
+/// ```
+/// use factrail_policy::ceiling_tokens;
+/// assert_eq!(ceiling_tokens(Some(1_000_000.0)), Some(850_000.0));
+/// assert_eq!(ceiling_tokens(None), None);
+/// ```
+pub fn ceiling_tokens(window: Option<f64>) -> Option<f64> {
+    window
+        .and_then(positive)
+        .map(|w| (w * CEILING_PERCENT / 100.0).floor())
+}
+
+/// The size at which a compacted session may compact again: the baseline plus
+/// the re-arm gap, never above the ceiling. Without the cap, compactions that
+/// free almost nothing push the point up by one gap each time until it passes
+/// the window, and the trigger can then never fire.
+///
+/// ```
+/// use factrail_policy::rearm_point;
+/// assert_eq!(rearm_point(190_000.0, 40_000.0, Some(850_000.0)), 230_000.0);
+/// assert_eq!(rearm_point(965_604.0, 40_000.0, Some(850_000.0)), 850_000.0);
+/// assert_eq!(rearm_point(965_604.0, 40_000.0, None), 1_005_604.0);
+/// ```
+pub fn rearm_point(baseline: f64, gap: f64, ceiling: Option<f64>) -> f64 {
+    let point = baseline + gap;
+    ceiling.map_or(point, |c| point.min(c))
+}
+
+/// Would installing a compaction that leaves `projected` tokens still leave
+/// room for the next one? True when the projected size plus the re-arm gap is
+/// at or under the ceiling, or when there is no ceiling. A reduce-only result
+/// that fails this must give way to a summary: installing it leaves the session
+/// where no later compaction can start before the engine's own.
+///
+/// ```
+/// use factrail_policy::fits_under_ceiling;
+/// assert!(fits_under_ceiling(150_000.0, 40_000.0, Some(850_000.0)));
+/// assert!(!fits_under_ceiling(960_000.0, 40_000.0, Some(850_000.0)));
+/// assert!(!fits_under_ceiling(820_000.0, 40_000.0, Some(850_000.0)));
+/// assert!(fits_under_ceiling(960_000.0, 40_000.0, None));
+/// ```
+pub fn fits_under_ceiling(projected: f64, gap: f64, ceiling: Option<f64>) -> bool {
+    ceiling.is_none_or(|c| projected + gap <= c)
+}
+
 /// Why [`should_compact`] decided as it did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -107,8 +160,9 @@ pub struct TriggerVerdict {
     pub reason: TriggerReason,
     /// The trigger in tokens; `None` = never.
     pub threshold: Option<f64>,
-    /// The size context must reach: the trigger, or the baseline plus the
-    /// re-arm gap when that is larger. `None` = never.
+    /// The size context must reach: the trigger, or the re-arm point (the
+    /// baseline plus the re-arm gap, capped at the ceiling) when that is larger.
+    /// `None` = never.
     pub need: Option<f64>,
 }
 
@@ -118,7 +172,8 @@ pub struct TriggerVerdict {
 /// Compacts when context reaches the trigger **and** has grown by the re-arm gap
 /// since the last compaction; without the second clause a compaction that cannot
 /// get under the trigger re-runs every turn, each a judging round plus a full
-/// prompt-cache rewrite. With no token figure, `percent` alone may trigger, but
+/// prompt-cache rewrite. The re-arm point is capped at the ceiling
+/// ([`rearm_point`]), so it can never sit beyond the window. With no token figure, `percent` alone may trigger, but
 /// only before any compaction: a missing figure never re-triggers on its own.
 ///
 /// ```
@@ -138,7 +193,7 @@ pub fn should_compact(
     let gap = rearm_gap(threshold, config.rearm_tokens);
     let baseline = baseline.and_then(positive);
     let need = match baseline {
-        Some(b) => threshold.map(|t| t.max(b + gap)),
+        Some(b) => threshold.map(|t| t.max(rearm_point(b, gap, ceiling_tokens(window)))),
         None => threshold,
     };
     let below = |n: f64, bound: Option<f64>| bound.is_none_or(|b| n < b);

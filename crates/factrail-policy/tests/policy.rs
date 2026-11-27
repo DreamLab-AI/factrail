@@ -628,6 +628,65 @@ fn delay_is_ttl_minus_margin_or_half_a_ttl_the_margin_would_swallow() {
     assert_eq!(nudge_delay_ms(1.0005, 0.0), 1001, "rounded half up");
 }
 
+/// The 2026-11-27 incident: every compaction freed about nothing, so each one
+/// moved the re-arm point up by the gap until it read 1,005,604 on a 1M window.
+#[test]
+fn near_empty_compactions_cannot_ratchet_the_rearm_point_past_the_ceiling() {
+    let w = Some(1_000_000.0);
+    let ceiling = ceiling_tokens(w).unwrap();
+    assert_eq!(ceiling, 850_000.0);
+    let mut baseline = 189_506.0;
+    for _ in 0..40 {
+        let v = should_compact(Some(baseline), None, w, Some(baseline), &base());
+        let need = v.need.unwrap();
+        assert!(need <= ceiling, "re-arm point {need} is past the ceiling");
+        assert!(should_compact(Some(need), None, w, Some(baseline), &base()).run);
+        // The next compaction frees nothing: the session settles where it fired.
+        baseline = need.max(baseline);
+    }
+    // The last line of the incident: at 965,604 after a compaction that kept everything.
+    let v = should_compact(Some(965_604.0), None, w, Some(965_604.0), &base());
+    assert_eq!(
+        (v.run, v.reason, v.need),
+        (true, TriggerReason::Threshold, Some(850_000.0))
+    );
+}
+
+#[test]
+fn the_ceiling_never_lowers_the_trigger_and_needs_a_window() {
+    let high =
+        config(json!({ "compactAtPercent": 95, "compactAtTokens": 0, "rearmTokens": 40_000 }));
+    let v = should_compact(
+        Some(900_000.0),
+        None,
+        Some(1_000_000.0),
+        Some(800_000.0),
+        &high,
+    );
+    assert_eq!((v.run, v.need), (false, Some(950_000.0)));
+    let v = should_compact(Some(500_000.0), None, None, Some(480_000.0), &base());
+    assert_eq!(
+        (v.run, v.need),
+        (false, Some(520_000.0)),
+        "no window, no ceiling"
+    );
+    assert_eq!(ceiling_tokens(Some(0.0)), None);
+    assert_eq!(ceiling_tokens(Some(f64::NAN)), None);
+}
+
+#[test]
+fn an_install_must_leave_room_for_the_next_compaction() {
+    let c = ceiling_tokens(Some(1_000_000.0));
+    assert!(
+        fits_under_ceiling(810_000.0, 40_000.0, c),
+        "exactly at the ceiling fits"
+    );
+    assert!(!fits_under_ceiling(810_001.0, 40_000.0, c));
+    assert!(fits_under_ceiling(2_000_000.0, 40_000.0, None));
+    assert_eq!(rearm_point(100_000.0, 40_000.0, c), 140_000.0);
+    assert_eq!(rearm_point(900_000.0, 40_000.0, c), 850_000.0);
+}
+
 #[test]
 fn armed_only_above_the_floor_and_once_grown_past_the_last_compaction() {
     assert!(!should_arm_nudge(Some(90_000.0), 100_000.0, None, 40_000.0));

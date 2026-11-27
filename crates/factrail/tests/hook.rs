@@ -209,6 +209,76 @@ fn turn_triggers_holds_and_arms_the_nudge() {
     assert_eq!(home.hook("turn", &sub)["compact"], false);
 }
 
+/// The 2026-11-27 incident end to end: a session at 965,604 of 1,000,000 tokens
+/// whose rules can free next to nothing. Installing that left the engine's own
+/// auto-compaction to come back for the same answer until the session died.
+#[test]
+fn a_result_that_leaves_no_headroom_goes_to_the_summary_in_either_fallback_mode() {
+    for fallback in ["rules", "summary"] {
+        let home = Home::new(&format!("headroom-{fallback}"));
+        let mut request = compact_request(
+            json!({ "backend": "rules", "fallback": fallback }),
+            session(8, false),
+            json!({}),
+        );
+        request["usage"] = json!({ "tokens": 965_604, "window": 1_000_000 });
+        request["instructions"] = json!("keep the API design notes");
+        let r = home.hook("compact", &request);
+        assert_eq!(r["ok"], true, "{r}");
+        assert_eq!(r["action"], "builtin", "{fallback}: {r}");
+        if fallback == "rules" {
+            assert_eq!(r["reason"], "no-headroom", "{r}");
+            assert!(r["log"].as_str().unwrap().contains("no headroom"), "{r}");
+        }
+        assert!(r.get("messages").is_none(), "nothing is installed: {r}");
+        let instructions = r["instructions"].as_str().unwrap_or_default();
+        assert!(instructions.contains("factrail/outputs/s1"), "{r}");
+        assert!(
+            instructions.starts_with("keep the API design notes\n\n"),
+            "the user's /compact text survives: {r}"
+        );
+        assert!(home.0.join("cache/factrail/outputs/s1/u0.txt").exists());
+    }
+}
+
+#[test]
+fn the_same_result_installs_while_the_next_compaction_still_has_room() {
+    let home = Home::new("headroom-ok");
+    let mut request = compact_request(json!({ "backend": "rules" }), session(8, false), json!({}));
+    request["usage"] = json!({ "tokens": 800_000, "window": 1_000_000 });
+    let r = home.hook("compact", &request);
+    assert_eq!(r["action"], "install", "{r}");
+    // No window figure: no ceiling to hold the result against.
+    let mut request = compact_request(json!({ "backend": "rules" }), session(8, false), json!({}));
+    request["usage"] = json!({ "tokens": 965_604 });
+    assert_eq!(home.hook("compact", &request)["action"], "install");
+}
+
+#[test]
+fn turn_rearms_at_the_ceiling_never_past_the_window() {
+    let home = Home::new("turn-ceiling");
+    let base = |tokens: f64, baseline: f64| {
+        json!({ "protocol": 1, "config": {}, "usage": { "tokens": tokens, "percent": 90, "window": 1000000 },
+            "baseline": { "tokens": baseline, "at": 1 }, "rateLimits": 1, "hasApiKey": false,
+            "event": { "reason": "answer" }, "tools": [], "store": {}, "now": 1000 })
+    };
+    let at_the_wall = home.hook("turn", &base(965_604.0, 965_604.0));
+    assert_eq!(at_the_wall["compact"], true, "{at_the_wall}");
+    assert_eq!(at_the_wall["need"], 850_000.0);
+    let holding = home.hook("turn", &base(830_000.0, 825_000.0));
+    assert_eq!(holding["compact"], false);
+    assert_eq!(holding["need"], 850_000.0, "capped, not 865,000");
+    assert!(
+        holding["log"]
+            .as_str()
+            .unwrap()
+            .contains("holding until 850000"),
+        "{holding}"
+    );
+    let idle = home.hook("turn", &base(850_000.0, 825_000.0));
+    assert_eq!(idle["compact"], true, "{idle}");
+}
+
 #[test]
 fn taint_event_and_status() {
     let home = Home::new("status");

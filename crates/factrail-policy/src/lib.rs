@@ -12,6 +12,7 @@
 //! | switch | [`resolve_enabled`], [`SwitchCommand`] |
 //! | judge | [`decide`] → [`Verdict`] |
 //! | trigger | [`trigger_tokens`], [`rearm_gap`], [`should_compact`] |
+//! | ceiling | [`ceiling_tokens`], [`rearm_point`], [`fits_under_ceiling`] |
 //! | cache warmth | [`cache_ttl_seconds`], [`nudge_delay_ms`], [`should_arm_nudge`], [`CacheWarm`] |
 //! | housekeeping | [`expired_session_keys`], [`compact_scope`], [`turn_may_trigger`] |
 //!
@@ -79,8 +80,9 @@ pub use taint::{
     taint_key, taint_record, taint_write, taints_tool,
 };
 pub use trigger::{
-    SESSION_STATE_TTL_MS, TriggerReason, TriggerVerdict, cache_ttl_seconds, expired_session_keys,
-    nudge_delay_ms, rearm_gap, should_arm_nudge, should_compact, trigger_tokens,
+    CEILING_PERCENT, SESSION_STATE_TTL_MS, TriggerReason, TriggerVerdict, cache_ttl_seconds,
+    ceiling_tokens, expired_session_keys, fits_under_ceiling, nudge_delay_ms, rearm_gap,
+    rearm_point, should_arm_nudge, should_compact, trigger_tokens,
 };
 
 /// Compiles and runs the README's example as a doctest.
