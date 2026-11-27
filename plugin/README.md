@@ -29,6 +29,9 @@ defect rejects the list, so a malformed answer can never corrupt a session.
 **Hysteresis.** After any compaction of the main conversation that is not a skip, the
 plugin writes `baseline:<session>` = `{ pending: true, at }`; the binary reads the
 post-compaction size at the next turn. A subagent's own compaction leaves it alone.
+The binary caps the re-arm point at 85% of the window, and above that line it answers
+`builtin` rather than install a result that leaves no room for the next compaction, so
+`fallback: rules` still ends in a summary when reduction alone cannot hold the session.
 
 **Store pruning stays in the plugin.** It is housekeeping of this plugin's store, not
 policy: the binary only ever sees one session's entries, so it cannot see the dead
